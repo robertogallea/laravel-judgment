@@ -1,0 +1,48 @@
+{
+    "name": "robertogallea/laravel-judgment",
+    "description": "Probabilistic assessments of unstructured evidence, with deterministic, application-owned decisions.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": "^8.3",
+        "illuminate/contracts": "^12.0|^13.0",
+        "illuminate/support": "^12.0|^13.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^10.0|^11.0",
+        "pestphp/pest": "^3.0|^4.0",
+        "phpstan/phpstan": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "RobertoGallea\\Judgment\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "RobertoGallea\\Judgment\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "RobertoGallea\\Judgment\\JudgmentServiceProvider"
+            ],
+            "aliases": {
+                "Judge": "RobertoGallea\\Judgment\\Facades\\Judge"
+            }
+        }
+    },
+    "scripts": {
+        "test": "pest",
+        "analyse": "phpstan analyse"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
