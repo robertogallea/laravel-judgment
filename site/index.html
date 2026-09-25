@@ -1,0 +1,1060 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laravel Judgment</title>
+<meta name="description" content="Probabilistic assessments of unstructured evidence, with deterministic, application-owned decisions.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2311141a'/><circle cx='16' cy='16' r='6' fill='%23e5322d'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #ffffff;
+  --bg-soft: #f6f7f9;
+  --bg-code: #f4f5f7;
+  --border: #e3e5ea;
+  --text: #1c1f26;
+  --text-soft: #545b69;
+  --accent: #d42a25;
+  --accent-soft: rgba(212, 42, 37, .08);
+  --tok-comment: #7a818f;
+  --tok-keyword: #b3261e;
+  --tok-string: #1f7a4d;
+  --tok-number: #9a5b00;
+  --tok-function: #2952a3;
+  --tok-variable: #7b3fa6;
+  --tok-punct: #545b69;
+  --sidebar-w: 270px;
+  --top-h: 56px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1015;
+    --bg-soft: #151820;
+    --bg-code: #151820;
+    --border: #262a35;
+    --text: #e6e8ec;
+    --text-soft: #9aa1ae;
+    --accent: #ff4d45;
+    --accent-soft: rgba(255, 77, 69, .12);
+    --tok-comment: #6f7686;
+    --tok-keyword: #ff6b63;
+    --tok-string: #7fd1a0;
+    --tok-number: #f0b36a;
+    --tok-function: #8ab4ff;
+    --tok-variable: #d2a8ff;
+    --tok-punct: #9aa1ae;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+html { scroll-padding-top: calc(var(--top-h) + 16px); }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.65 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Top bar */
+.topbar {
+  position: fixed; inset: 0 0 auto 0; height: var(--top-h); z-index: 20;
+  display: flex; align-items: center; gap: 12px; padding: 0 20px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); letter-spacing: -.01em; }
+.brand:hover { text-decoration: none; }
+.brand-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+.topbar .spacer { flex: 1; }
+.topbar .gh { color: var(--text-soft); font-size: 14px; font-weight: 500; }
+.menu-btn {
+  display: none; border: 1px solid var(--border); background: var(--bg-soft); color: var(--text);
+  border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 14px; cursor: pointer;
+}
+
+/* Sidebar */
+.sidebar {
+  position: fixed; top: var(--top-h); bottom: 0; left: 0; width: var(--sidebar-w);
+  overflow-y: auto; padding: 20px 12px 40px 20px;
+  border-right: 1px solid var(--border); background: var(--bg);
+  font-size: 14px;
+}
+.sidebar ul { list-style: none; margin: 0; padding: 0; }
+.sidebar > ul > li { margin-bottom: 2px; }
+.sidebar a { display: block; padding: 4px 10px; border-radius: 6px; color: var(--text-soft); line-height: 1.4; }
+.sidebar a:hover { color: var(--text); background: var(--bg-soft); text-decoration: none; }
+.sidebar > ul > li > a { color: var(--text); font-weight: 600; }
+.sidebar ul ul { margin: 2px 0 8px 10px; border-left: 1px solid var(--border); }
+.sidebar ul ul a { padding-left: 12px; font-size: 13.5px; }
+.sidebar a.active { color: var(--accent); background: var(--accent-soft); }
+
+/* Content */
+main { margin-left: var(--sidebar-w); padding: calc(var(--top-h) + 32px) 48px 96px; }
+.content { max-width: 860px; margin: 0 auto; }
+.hero img { width: 100%; height: auto; border-radius: 14px; display: block; border: 1px solid var(--border); }
+.hero .lead { font-size: 19px; color: var(--text-soft); margin: 20px 0 8px; }
+h1, h2, h3, h4 { line-height: 1.25; letter-spacing: -.015em; }
+h1 { font-size: 36px; margin: 28px 0 8px; }
+h2 { font-size: 27px; margin: 64px 0 12px; padding-top: 20px; border-top: 1px solid var(--border); }
+h3 { font-size: 20px; margin: 36px 0 8px; }
+h4 { font-size: 16px; margin: 24px 0 6px; }
+h2 a.anchor, h3 a.anchor { color: var(--text-soft); opacity: 0; margin-left: 8px; font-weight: 400; }
+h2:hover a.anchor, h3:hover a.anchor { opacity: 1; }
+p, ul, ol { margin: 12px 0; }
+li { margin: 4px 0; }
+blockquote {
+  margin: 18px 0; padding: 12px 18px; border-left: 3px solid var(--accent);
+  background: var(--accent-soft); border-radius: 0 8px 8px 0; font-style: italic;
+}
+blockquote p { margin: 0; }
+.note {
+  margin: 18px 0; padding: 12px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-soft);
+  font-size: 15px;
+}
+.note strong:first-child { color: var(--accent); }
+
+code, pre { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-ligatures: none; }
+:not(pre) > code {
+  font-size: .86em; background: var(--bg-code); border: 1px solid var(--border);
+  padding: 1px 5px; border-radius: 5px; overflow-wrap: anywhere;
+}
+.code { position: relative; margin: 16px 0; }
+pre {
+  margin: 0; padding: 16px 18px; overflow-x: auto; font-size: 13.5px; line-height: 1.6;
+  background: var(--bg-code); border: 1px solid var(--border); border-radius: 10px; tab-size: 4;
+}
+pre code { background: none; border: 0; padding: 0; }
+.copy {
+  position: absolute; top: 8px; right: 8px; opacity: 0; transition: opacity .15s;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text-soft);
+  font: 500 12px Inter, sans-serif; padding: 3px 9px; border-radius: 6px; cursor: pointer;
+}
+.code:hover .copy, .copy:focus { opacity: 1; }
+@media (hover: none) { .copy { opacity: 1; } }
+
+.table-wrap { overflow-x: auto; margin: 16px 0; border: 1px solid var(--border); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { background: var(--bg-soft); font-weight: 600; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+
+/* Prism tokens */
+.token.comment, .token.prolog, .token.doctype, .token.cdata { color: var(--tok-comment); font-style: italic; }
+.token.keyword, .token.boolean, .token.important, .token.atrule, .token.selector, .token.tag { color: var(--tok-keyword); }
+.token.string, .token.char, .token.attr-value, .token.heredoc-string, .token.nowdoc-string { color: var(--tok-string); }
+.token.number, .token.constant { color: var(--tok-number); }
+.token.function, .token.class-name, .token.builtin, .token.package { color: var(--tok-function); }
+.token.variable, .token.property, .token.attr-name, .token.key { color: var(--tok-variable); }
+.token.punctuation, .token.operator { color: var(--tok-punct); }
+
+footer { margin-top: 80px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--text-soft); font-size: 14px; }
+
+/* Phone and tablet */
+@media (max-width: 960px) {
+  .menu-btn { display: inline-block; }
+  .sidebar { transform: translateX(-100%); transition: transform .2s; z-index: 15; width: min(300px, 85vw); }
+  body.nav-open .sidebar { transform: none; box-shadow: 0 0 40px rgba(0,0,0,.25); }
+  main { margin-left: 0; padding: calc(var(--top-h) + 20px) 16px 64px; }
+  h1 { font-size: 30px; }
+  h2 { font-size: 24px; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-controls="sidebar" aria-expanded="false">Menu</button>
+  <a class="brand" href="#top"><span class="brand-dot"></span>Laravel Judgment</a>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/robertogallea/laravel-judgment">GitHub</a>
+</header>
+
+<nav class="sidebar" id="sidebar" aria-label="Documentation sections"><ul id="nav"></ul></nav>
+
+<main id="top">
+<div class="content">
+
+<section class="hero" id="introduction">
+  <img src="assets/banner.png" alt="Laravel Judgment: probabilistic assessments, deterministic decisions" width="2170" height="725">
+  <h1>Laravel Judgment</h1>
+  <p class="lead">Probabilistic assessments of unstructured evidence, with deterministic, application-owned decisions.</p>
+</section>
+
+<p>Judgment is for criteria that can only be described, not implemented as hard rules: “is this refund request an attempt to abuse the policy?”, “which team should handle this ticket?”. It sits after validation, authorization and business rules. An <strong>Engine</strong> answers typed <strong>Questions</strong> over the <strong>Evidence</strong> you declare; your own <strong>Decision</strong> class turns those answers into an <strong>Outcome</strong>. The Engine never sees your Outcomes or thresholds.</p>
+
+<pre><code class="language-php">$assessment = (new RefundAbuse($refund))-&gt;assess(); // the Engine answers
+
+$assessment-&gt;likelihood('abusive')-&gt;probability();  // 0.72
+$assessment-&gt;outcome();                             // your Decision: Escalate
+</code></pre>
+
+<h3 id="features">Features</h3>
+<ul>
+  <li><strong><a href="#declaring-a-judgment">Judgments</a></strong> constructed with their Subject, declaring explicit Evidence, with end-user text marked <a href="#untrusted-evidence">untrusted</a>.</li>
+  <li><strong><a href="#questions">Typed Questions</a></strong>: Likelihood, Classification, Rating and Likelihood Set, <a href="#reading-an-assessment">read</a> with threshold helpers and a package-defined Confidence.</li>
+  <li><strong><a href="#deciding">Pure Decisions</a></strong> mapping an Assessment and Subject facts to a backed-enum Outcome, generated by <a href="#generating-judgments-and-decisions"><code>make:judgment</code> and <code>make:decision</code></a>.</li>
+  <li><strong><a href="#when-the-engine-fails">Failures as data</a></strong>: an Engine failure is thrown or returned as <code>Unassessed</code>, never mapped to a default Outcome.</li>
+  <li><strong><a href="#engines">Engines</a></strong>: TypeSafe’s hosted Jev and a self-hosted <a href="#laya">Laya</a> server, with pinned models and several connections.</li>
+  <li><strong><a href="#caching">Caching</a></strong> of identical Evidence and Questions, opt-in per Judgment.</li>
+  <li><strong><a href="#persisted-assessments">Persisted Assessments</a></strong> with their Evidence, answers, Provenance and Outcome, for audit and replay.</li>
+  <li><strong><a href="#queued-assessment">Queued assessment</a></strong> off the request cycle.</li>
+  <li><strong><a href="#review-and-resolution">Review and Resolution</a></strong> of uncertain Outcomes by a person, recorded next to the automatic Outcome.</li>
+  <li><strong><a href="#calibration">Calibration</a></strong> of a Decision’s thresholds against labelled cases with <code>judgment:eval</code>.</li>
+  <li><strong><a href="#coding-agents-laravel-boost">Coding-agent skills</a></strong> for Laravel Boost that write Judgments and Decisions from a plain-language description.</li>
+  <li><strong><a href="#events-and-logging">Events and logging</a></strong> for every assessment and Review.</li>
+  <li><strong><a href="#testing">Testing fakes</a></strong> that script answers without an Engine: <code>Assessment::fake()</code> and <code>Judge::fake()</code>.</li>
+</ul>
+
+<h3 id="use-cases">Use cases</h3>
+<p>Each use case below is built from the Question kinds the package ships. The Outcomes are examples: your Outcome enum names the actions your application can take.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Use case</th><th>Questions</th><th>Example Outcomes</th></tr></thead>
+  <tbody>
+    <tr><td>Refund or claim abuse triage</td><td><a href="#likelihood">Likelihood</a> <code>abusive</code>, <a href="#rating">Rating</a> <code>credibility</code> (the <a href="#declaring-a-judgment"><code>RefundAbuse</code></a> example)</td><td>Approve, Escalate, Reject</td></tr>
+    <tr><td>Support ticket routing</td><td><a href="#classification">Classification</a> over a <code>Department</code> enum, <a href="#rating">Rating</a> <code>severity</code></td><td>a team per department, Review when the problem blocks the customer</td></tr>
+    <tr><td>Content screening</td><td><a href="#likelihood-set">Likelihood Set</a> over a <code>Harm</code> enum</td><td>Publish, Review, Remove</td></tr>
+    <tr><td>Marketplace listing checks</td><td><a href="#likelihood">Likelihood</a> “Is the listed product counterfeit?”</td><td>List, Review, Delist</td></tr>
+  </tbody>
+</table></div>
+<p>In every row the Engine only answers the Questions. What happens next, including when a person looks at the case, is up to your <a href="#deciding">Decision</a>.</p>
+
+<h3 id="philosophy">Philosophy</h3>
+<blockquote><p>If you could write the rule, write the rule. Judgment is for criteria you can only describe, over evidence you would otherwise have to read.</p></blockquote>
+<p>Deterministic checks run first, in their usual order: validation (is the input well-formed?), then authorization (is this person allowed to do this?), then your business rules (is the order inside the refund window? is the amount under the limit?). Judgment only sees what is left: a request that is valid, permitted and within the rules, but that a person would still have to read to decide.</p>
+<p>Do not use Judgment:</p>
+<ul>
+  <li><strong>for anything a rule can express.</strong> “Has this customer asked for more than three refunds this year?” is a query. Asking an Engine to count is slower, costs money, and answers with a probability where you already had the truth. Read the count yourself and pass it to your Decision, as <code>$frequent</code> does in <a href="#deciding">Deciding</a>.</li>
+  <li><strong>to decide what to do.</strong> A Question asks about the world (“is this claim credible?”), never “should I approve this refund?”. The Outcome is chosen by your Decision, where it is deterministic, versioned and testable.</li>
+  <li><strong>when a wrong answer cannot be caught.</strong> Every Assessment is a probability. If no Outcome can send the uncertain cases to a person, and a wrong automatic call is unacceptable, Judgment is the wrong tool.</li>
+  <li><strong>where the answer must arrive in a few milliseconds.</strong> An Engine round takes around 0.7 s (see <a href="#latency">Latency</a>).</li>
+</ul>
+
+<h3 id="no-gates-policies-validation-rules-middleware-or-blade" data-nav="No Gates or Policies">No Gates, Policies, validation rules, middleware or Blade</h3>
+<p>These are the first integrations people ask for, and they are missing on purpose (<a href="https://github.com/robertogallea/laravel-judgment/blob/main/docs/adr/0007-no-gates-policies-or-validation-integration.md">ADR-0007</a>). Authorization and validation must stay deterministic: the same input gets the same answer, every time, and the answer can be explained by reading code. A Policy, validation rule, middleware or <code>@can</code>-style directive that consults an Engine turns a probability into a hard allow/deny or pass/fail, with no application-owned Decision in between, no Review band for uncertain cases, and no record of which thresholds applied.</p>
+<p>Assess the Judgment where you would call any other service, then act on its Outcome in your own code. The one sanctioned overlap goes the other way: an ordinary Policy decides who may record a <a href="#resolving">Resolution</a>.</p>
+
+<h2 id="installation">Installation</h2>
+<pre><code class="language-bash">composer require robertogallea/laravel-judgment
+</code></pre>
+<p>Judgments are assessed on <a href="https://docs.typesafe.ai">Jev</a> by default. Set your API key:</p>
+<pre><code class="language-ini">TYPESAFE_API_KEY=your-key
+</code></pre>
+<p>To publish the config file: <code>php artisan vendor:publish --tag=judgment-config</code>. See <a href="#engines">Engines</a> for the Jev options and for other Engines.</p>
+<p>Every Assessment is recorded in the database, so publish and run the migration:</p>
+<pre><code class="language-bash">php artisan vendor:publish --tag=judgment-migrations
+php artisan migrate
+</code></pre>
+<p>The migration is published with the current timestamp. Republishing with <code>--force</code> overwrites the file you already published rather than adding a second one.</p>
+
+<h2 id="declaring-a-judgment">Declaring a Judgment</h2>
+<p>A Judgment is constructed with its Subject, like a Mailable. It declares its Evidence explicitly, the Questions to ask, and optionally a default Decision.</p>
+<pre><code class="language-php">use RobertoGallea\Judgment\Evidence;
+use RobertoGallea\Judgment\Judgment;
+use RobertoGallea\Judgment\Questions\Likelihood;
+use RobertoGallea\Judgment\Questions\Rating;
+
+final class RefundAbuse extends Judgment
+{
+    public function __construct(public readonly Refund $refund) {}
+
+    public function evidence(): array
+    {
+        return [
+            'order' =&gt; ['item' =&gt; $this-&gt;refund-&gt;item, 'amount_eur' =&gt; $this-&gt;refund-&gt;amount],
+            'request' =&gt; ['explanation' =&gt; Evidence::untrusted($this-&gt;refund-&gt;explanation)],
+        ];
+    }
+
+    public function questions(): array
+    {
+        return [
+            'abusive' =&gt; Likelihood::that('Is this refund request an attempt to abuse the refund policy?')
+                -&gt;means(true: 'Likely a claim the customer is not entitled to', false: 'A good-faith claim'),
+            'credibility' =&gt; Rating::of('How credible is the explanation in request.explanation?', levels: [
+                'Not credible', 'Doubtful', 'Plausible', 'Fully credible',
+            ]),
+        ];
+    }
+
+    public function decision(): string
+    {
+        return RefundDecision::class;
+    }
+}
+</code></pre>
+<p>Every Question is asked independently, and is phrased about the world, never about what to do. The Evidence holds only what a reader needs. The customer’s refund count stays out of it, because the Decision reads that from the Subject: the Engine tends to underweight counts, and a fact you already know should never come back as a probability.</p>
+
+<h3 id="untrusted-evidence">Untrusted Evidence</h3>
+<p>Mark text written by an end user with <code>Evidence::untrusted()</code>, as <code>request.explanation</code> is above, so the Engine treats it as a claim to assess and never as instructions.</p>
+<p>The text stays at the path where you declared it, so a Question can still refer to <code>request.explanation</code>. The Jev driver sends it at that path, fenced in tags that the text cannot close and prefaced by a note on how to read it. Other Engines receive an <code>UntrustedText</code> value, which serialises to the plain text.</p>
+
+<h2 id="questions">Questions</h2>
+<p>Four kinds of Question, chosen by the shape of the answer you need.</p>
+
+<h3 id="likelihood">Likelihood</h3>
+<p>The probability that a statement is true.</p>
+<pre><code class="language-php">Likelihood::that('Is the listed product counterfeit?')
+</code></pre>
+
+<h3 id="classification">Classification</h3>
+<p>A choice among 2 to 255 labels, with a probability for each. Labels are a list, a <code>label => description</code> map, or a backed enum (described by its <code>description()</code> method, if any).</p>
+<pre><code class="language-php">Classification::of('In which language is the ticket written?', labels: ['english', 'italian', 'other'])
+Classification::of('Which team should handle this ticket?', labels: Department::class)
+</code></pre>
+
+<h3 id="rating">Rating</h3>
+<p>A position on an ordered scale of 2 to 10 described levels, lowest first.</p>
+<pre><code class="language-php">Rating::of('How badly does the problem affect the customer?', levels: [
+    'Cosmetic', 'Annoying', 'Degrading their work', 'Blocking their work',
+])
+</code></pre>
+
+<h3 id="likelihood-set">Likelihood Set</h3>
+<p>Independent Likelihoods over a closed set of labels, for multi-label questions. Each label supplies its complete question (there is no templating), either from a <code>label => question</code> map or from a backed enum with a <code>question()</code> method.</p>
+<pre><code class="language-php">enum Harm: string
+{
+    case Hate = 'hate';
+    case Spam = 'spam';
+
+    public function question(): string
+    {
+        return match ($this) {
+            self::Hate =&gt; 'Does the post attack people based on a protected characteristic?',
+            self::Spam =&gt; 'Is the post unsolicited promotion?',
+        };
+    }
+}
+
+'harms' =&gt; Likelihood::each(Harm::class),
+'topics' =&gt; Likelihood::each([
+    'politics' =&gt; 'Is the post about politics?',
+    'sport' =&gt; 'Is the post about sport?',
+]),
+</code></pre>
+<p>The Engine receives one Likelihood per label under dotted keys (<code>harms.hate</code>, <code>harms.spam</code>), so labels cannot contain a dot.</p>
+
+<h2 id="reading-an-assessment">Reading an Assessment</h2>
+<pre><code class="language-php">$assessment = (new RefundAbuse($refund))-&gt;assess();
+
+$assessment-&gt;likelihood('abusive')-&gt;probability();       // 0.72
+$assessment-&gt;likelihood('abusive')-&gt;above(.65);          // true (at or over)
+
+$department = $assessment-&gt;classification('department');
+$department-&gt;label();                                    // Department::Billing
+$department-&gt;probabilityOf(Department::Technical);       // 0.20
+$department-&gt;confidence();                               // top probability minus runner-up
+
+$severity = $assessment-&gt;rating('severity');
+$severity-&gt;level();                                      // most probable level, from 0
+$severity-&gt;expected();                                   // probability-weighted mean level
+
+$harms = $assessment-&gt;likelihoodSet('harms');
+$harms-&gt;of(Harm::Spam)-&gt;above(.40);                      // one label's Likelihood
+$harms-&gt;max()-&gt;above(.80);                               // the highest Likelihood in the set
+$harms-&gt;labelsAbove(.40);                                // [Harm::Spam, ...], highest first
+</code></pre>
+<p>Keys can be strings or backed-enum cases. Reading an undeclared key, or a Question as the wrong kind, throws an exception naming what is declared. <code>$assessment->provenance</code> records the Engine, model and request that produced the answers.</p>
+
+<h2 id="deciding">Deciding</h2>
+<p>A Decision is a plain, pure class that maps an Assessment to an Outcome. Outcomes are a backed enum implementing <code>Outcome</code>.</p>
+<pre><code class="language-php">use RobertoGallea\Judgment\Assessment;
+use RobertoGallea\Judgment\Contracts\Decision;
+use RobertoGallea\Judgment\Contracts\Outcome;
+
+enum RefundOutcome: string implements Outcome
+{
+    case Approve = 'approve';
+    case Escalate = 'escalate';
+    case Reject = 'reject';
+
+    public function requiresReview(): bool
+    {
+        return $this === self::Escalate;
+    }
+}
+
+final class RefundDecision implements Decision
+{
+    public function __invoke(Assessment $assessment, RefundAbuse $judgment): RefundOutcome
+    {
+        $abusive = $assessment-&gt;likelihood('abusive');                          // asked of the Engine
+        $doubtful = $assessment-&gt;rating('credibility')-&gt;below(2.0);             // asked of the Engine
+        $frequent = $judgment-&gt;refund-&gt;customer-&gt;refundsThisYear() &gt;= 3;       // a fact you already know
+
+        return match (true) {
+            $abusive-&gt;above(.65) =&gt; RefundOutcome::Reject,
+            $abusive-&gt;above(.30) =&gt; RefundOutcome::Escalate,
+            $doubtful =&gt; RefundOutcome::Escalate,
+            $frequent =&gt; RefundOutcome::Escalate,
+            default =&gt; RefundOutcome::Approve,
+        };
+    }
+}
+
+$outcome = $assessment-&gt;outcome();                          // the Judgment's default Decision
+$outcome = $assessment-&gt;decide(new StrictRefundDecision()); // another Decision over the same answers
+</code></pre>
+<p>The Decision receives the Judgment, and through it the Subject, so it can combine the Engine’s answers with facts that are not in question. Lead with a Decision like this one, not with a table of bands on a single Likelihood. In a trial of hand-labelled refund cases, bands on the abuse Likelihood alone (reject at .90, review from .60) sent 86% of clear abuse to Review and approved the ambiguous abusive claims automatically. A Decision combining it with the credibility Rating (the first three arms above) made no wrong automatic calls at the same Review rate. Those thresholds were fitted to that trial: <a href="#calibration">calibrate</a> your own.</p>
+<p><code>refundsThisYear()</code> returns a count loaded with the Subject before assessing, such as a <code>withCount()</code> column, never a query of its own: a Decision stays pure (see below).</p>
+
+<h3 id="writing-decisions">Writing Decisions</h3>
+<ul>
+  <li><strong>One condition per <code>match</code> arm.</strong> An arm such as <code>$abusive->above(.30) &amp;&amp; ! $frequent =></code> is easy to misread, and its tests are easy to get wrong. Give each condition a named local, like <code>$doubtful</code> and <code>$frequent</code> above, and let the arm order express priority: the first arm that holds wins.</li>
+  <li><strong>Read a Rating through <code>expected()</code>.</strong> <code>level()</code> is only the most probable level, so an answer split between Doubtful and Plausible jumps from one to the other. <code>expected()</code> is the probability-weighted mean level, and <code>above()</code> and <code>below()</code> compare against it. Add <code>confidence()</code>, the margin between the top two levels, when a split answer should go to Review: with <code>$credibility = $assessment->rating('credibility')</code>, add the arm <code>$credibility->confidence() &lt; .3 => RefundOutcome::Escalate</code>. The same holds for a Classification: <code>label()</code> names the winner, <code>confidence()</code> says by how much it won.</li>
+  <li><strong>A Likelihood has no Confidence.</strong> Its probability is the measure. Uncertainty shows as a probability in the middle of the scale, which is what a Review band is for.</li>
+  <li><strong>Keep Decisions pure.</strong> Read only the Assessment and the Judgment: no clock, no database queries, no state of the Decision’s own. The fakes run every Decision twice and throw <code>ImpureDecision</code> if the Outcomes differ. Load the facts the Decision needs into the Subject before assessing.</li>
+</ul>
+
+<h3 id="thresholds-are-not-exact">Thresholds are not exact</h3>
+<p>An Engine does not answer identical requests identically. In the trial above, repeated requests differed by up to 0.05 in probability, and one case was given a probability of .47, .49 and .50 on three identical requests. An Assessment near a threshold may therefore yield a different Outcome if it is assessed again. Do not decide with a single cut-off between two automatic Outcomes: put a Review band around the uncertain region, so a case that wobbles moves between an automatic Outcome and Review, never between Approve and Reject.</p>
+
+<h2 id="generating-judgments-and-decisions" data-nav="Generators">Generating Judgments and Decisions</h2>
+<pre><code class="language-bash">php artisan make:judgment RefundAbuse --subject=Refund
+php artisan make:decision RefundDecision --judgment=RefundAbuse --outcome=RefundOutcome
+</code></pre>
+<p><code>make:judgment</code> writes <code>app/Judgments/RefundAbuse.php</code>, constructed with the Subject, with empty <code>evidence()</code>, <code>questions()</code> and <code>decision()</code> to fill in. A bare <code>--subject</code> is placed under <code>App\Models</code> (or <code>App</code> when there is no <code>app/Models</code> directory); without it the Subject is typed <code>mixed</code>.</p>
+<p><code>make:decision</code> writes <code>app/Decisions/RefundDecision.php</code>, type-hinting the Judgment (<code>App\Judgments\…</code>) and returning the Outcome enum (<code>App\Enums\…</code>). Pass a fully qualified class to use another namespace; a class whose name clashes with an import is written fully qualified. Without the options it falls back to the <code>Judgment</code> and <code>Outcome</code> contracts.</p>
+<p>A generated Decision contains no thresholds, only a commented placeholder arm, and throws a <code>LogicException</code> until you replace it. An Engine’s probabilities differ per Question, so there are no sensible default numbers: calibrate each threshold against labelled examples with <code>php artisan judgment:eval</code>.</p>
+
+<h2 id="when-the-engine-fails">When the Engine fails</h2>
+<p>A failed Engine call is never turned into a default Outcome. By default <code>assess()</code> throws <code>RobertoGallea\Judgment\Exceptions\EngineFailed</code>, wrapping the exception the Engine threw. Errors such as a <code>TypeError</code> are bugs, not Engine failures, and pass through unwrapped. A response that leaves a Question unanswered, answers one that was not asked, or cannot be read (such as a Classification answered with undeclared labels) throws <code>MalformedEngineResponse</code>, which extends <code>EngineFailed</code>.</p>
+<p>The Jev driver reports each kind of error with its own exception. All of them extend <code>EngineFailed</code>, and each message carries the Engine request id:</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Jev status</th><th>Exception</th></tr></thead>
+  <tbody>
+    <tr><td>400, 422</td><td><code>EngineRejectedRequest</code>: the request is invalid (such as an unknown model), so retrying will not help</td></tr>
+    <tr><td>401, 403</td><td><code>EngineUnauthorized</code>: the API key is wrong or missing</td></tr>
+    <tr><td>429</td><td><code>EngineRateLimited</code>, once the retries are used up</td></tr>
+    <tr><td>529</td><td><code>EngineOverloaded</code>, once the retries are used up</td></tr>
+  </tbody>
+</table></div>
+<p>To handle failures as data instead, turn off throwing on failure:</p>
+<pre><code class="language-ini">JUDGMENT_THROW_ON_FAILURE=false
+</code></pre>
+<p><code>assess()</code> then returns an <code>Unassessed</code> state in place of an Assessment. It carries the Judgment and the exception, and has no answers and no Outcome, so the application has to decide what an unassessed Judgment means:</p>
+<pre><code class="language-php">use RobertoGallea\Judgment\Unassessed;
+
+$result = (new RefundAbuse($refund))-&gt;assess();
+
+if ($result instanceof Unassessed) {
+    report($result-&gt;exception);
+
+    return $this-&gt;sendToManualReview($refund);
+}
+
+$outcome = $result-&gt;outcome();
+</code></pre>
+<p><code>assess()</code> is typed <code>Assessment|Unassessed</code> in both modes; in the default mode it never returns <code>Unassessed</code>.</p>
+
+<h2 id="engines">Engines</h2>
+<p>An Engine answers a Judgment’s Questions. Each connection in <code>judgment.engines</code> names its driver, and <code>judgment.engine</code> (<code>JUDGMENT_ENGINE</code>) picks the default connection. The package ships two connections, both on the <code>jev</code> driver: <code>jev</code> for TypeSafe’s hosted Jev API, and <a href="#laya"><code>laya</code></a> for a self-hosted Laya server.</p>
+
+<h3 id="jev">Jev</h3>
+<p>The <code>jev</code> connection:</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Option</th><th>Env</th><th>Default</th></tr></thead>
+  <tbody>
+    <tr><td><code>key</code></td><td><code>TYPESAFE_API_KEY</code></td><td>none, required</td></tr>
+    <tr><td><code>url</code></td><td><code>TYPESAFE_BASE_URL</code></td><td><code>https://api.typesafe.ai</code></td></tr>
+    <tr><td><code>model</code></td><td><code>JUDGMENT_JEV_MODEL</code></td><td><code>jev-1.13.0</code></td></tr>
+    <tr><td><code>allow_aliases</code></td><td><code>JUDGMENT_JEV_ALLOW_ALIASES</code></td><td><code>false</code></td></tr>
+    <tr><td><code>timeout</code> (seconds, per attempt)</td><td><code>JUDGMENT_JEV_TIMEOUT</code></td><td><code>10</code></td></tr>
+    <tr><td><code>retries</code></td><td><code>JUDGMENT_JEV_RETRIES</code></td><td><code>3</code></td></tr>
+  </tbody>
+</table></div>
+<p><strong>Pin the model.</strong> You calibrate thresholds against one model version, so the model is pinned to an exact version by default. An alias such as <code>jev-latest</code> can change underneath those thresholds, so it throws <code>UnpinnedModel</code> in production and logs a warning in other environments, unless you set <code>allow_aliases</code> on the connection.</p>
+<p><strong>Retries.</strong> A rate-limited (429) or overloaded (529) request is retried up to <code>retries</code> times. The driver waits as long as Jev’s <code>retry-after-ms</code> or <code>retry-after</code> header asks, capped at a minute. Without a header it backs off exponentially from half a second. Every other error fails at once.</p>
+<p><strong>Provenance.</strong> Each Assessment records the connection that answered as its <code>engine</code>, the exact model and Jev’s <code>x-typesafe-request-id</code>, for correlating with TypeSafe support. <code>$assessment->provenance->details</code> also holds the token <code>usage</code>, Jev’s own <code>confidence</code> per Classification and Rating, and the raw <code>response</code>. Jev’s confidence is kept for audit only: <code>confidence()</code> on an answer is always the package’s own measure.</p>
+<p>A connection on the <code>jev</code> driver requires a <code>key</code> unless it sets <code>require_key</code> to <code>false</code>, as <code>laya</code> does for a server that runs without one.</p>
+
+<h3 id="choosing-a-connection">Choosing a connection</h3>
+<p>A Judgment can choose another connection:</p>
+<pre><code class="language-php">public function engine(): ?string
+{
+    return 'jev-eu';
+}
+</code></pre>
+<p>A connection’s <code>driver</code> is <code>jev</code>, a driver you register, or a class implementing <code>RobertoGallea\Judgment\Contracts\Engine</code>, which is resolved from the container. An Engine implements <code>answer()</code>, and <code>model()</code> returning the exact model version it answers with, which keys the <a href="#caching">cache</a>:</p>
+<pre><code class="language-php">use RobertoGallea\Judgment\EngineManager;
+
+// config/judgment.php: 'engines' =&gt; ['classifier' =&gt; ['driver' =&gt; 'classifier', 'url' =&gt; '...']]
+app(EngineManager::class)-&gt;extend('classifier', fn ($app, array $config, string $connection) =&gt; new ClassifierEngine($config['url']));
+</code></pre>
+
+<h3 id="laya">Laya</h3>
+<p><a href="https://github.com/NandhaKishorM/laya">Laya</a> is an open-source decision engine you run yourself. Its <code>laya-serve</code> HTTP server speaks Jev’s API, so the <code>laya</code> connection uses the <code>jev</code> driver pointed at your server:</p>
+<pre><code class="language-bash">pip install "laya[serve]"
+laya-serve   # listens on 0.0.0.0:8000
+</code></pre>
+<pre><code class="language-ini">JUDGMENT_ENGINE=laya
+JUDGMENT_LAYA_ALLOW_ALIASES=true
+</code></pre>
+<p>Or keep Jev as the default and <a href="#choosing-a-connection">choose Laya per Judgment</a> with <code>engine()</code> returning <code>'laya'</code>.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Option</th><th>Env</th><th>Default</th></tr></thead>
+  <tbody>
+    <tr><td><code>key</code></td><td><code>LAYA_API_KEY</code></td><td>none; set it when <code>laya-serve</code> runs with <code>LAYA_API_KEY</code></td></tr>
+    <tr><td><code>require_key</code></td><td></td><td><code>false</code></td></tr>
+    <tr><td><code>url</code></td><td><code>LAYA_BASE_URL</code></td><td><code>http://localhost:8000</code></td></tr>
+    <tr><td><code>model</code></td><td><code>JUDGMENT_LAYA_MODEL</code></td><td><code>english</code></td></tr>
+    <tr><td><code>allow_aliases</code></td><td><code>JUDGMENT_LAYA_ALLOW_ALIASES</code></td><td><code>false</code></td></tr>
+    <tr><td><code>timeout</code> (seconds, per attempt)</td><td><code>JUDGMENT_LAYA_TIMEOUT</code></td><td><code>10</code></td></tr>
+    <tr><td><code>retries</code></td><td><code>JUDGMENT_LAYA_RETRIES</code></td><td><code>3</code></td></tr>
+    <tr><td><code>max_labels</code></td><td><code>JUDGMENT_LAYA_MAX_LABELS</code></td><td><code>20</code></td></tr>
+  </tbody>
+</table></div>
+<p><strong>Choose a checkpoint.</strong> <code>model</code> names a Laya checkpoint: <code>english</code>, <code>multilingual</code> (100+ languages) or <code>typed-decisions</code>. Laya also accepts their aliases (such as <code>en</code>, <code>multi</code> or <code>typed</code>), and the Hugging Face ids of the multilingual and typed-decisions checkpoints. Keep it set to one of them. For a name Laya does not know, and for <code>convaiinnovations/laya</code>, which Laya treats as auto-routing, it picks a checkpoint per request by language, so different texts could be answered by different checkpoints under the same thresholds. Each Assessment records the checkpoint that answered as its model.</p>
+<p><strong>Allow the alias knowingly.</strong> A checkpoint name carries no version, so a retrained <code>english</code> can change underneath calibrated thresholds (<a href="https://github.com/robertogallea/laravel-judgment/blob/main/docs/adr/0008-pinned-models-and-assessment-fingerprints.md">ADR-0008</a>). Like any alias, it throws <code>UnpinnedModel</code> in production and logs a warning elsewhere until you set <code>JUDGMENT_LAYA_ALLOW_ALIASES=true</code>. Recalibrate whenever you update the checkpoints you serve.</p>
+<p><strong>Differences from Jev.</strong></p>
+<ul>
+  <li><strong>Calibrate thresholds for Laya.</strong> It is another model, so thresholds calibrated against Jev do not carry over (see <a href="#calibration">Calibration</a>).</li>
+  <li><strong>At most <code>max_labels</code> labels per Classification.</strong> The package accepts up to 255 (<a href="https://github.com/robertogallea/laravel-judgment/blob/main/docs/adr/0012-question-limits-adopted-from-jev.md">ADR-0012</a>), but Laya fits a question’s options into a token budget and trims them beyond about 20 with descriptions, answering over labels it could not fully read. The connection rejects a larger Classification with <code>EngineRejectedRequest</code> before asking. Raise <code>max_labels</code> only for short labels you have checked, or set it to <code>null</code> for the package’s own 255. Laya rejects a list it cannot fit at all with a 422, which fails like any other Engine error.</li>
+  <li><strong>No request id.</strong> Laya sends no <code>x-typesafe-request-id</code>, so <code>request_id</code> is null.</li>
+  <li><strong>Its own confidence.</strong> Laya computes <code>confidence</code> differently from Jev. It is kept in <code>provenance->details</code> for audit only, since <code>confidence()</code> on an answer is always the package’s own measure (<a href="https://github.com/robertogallea/laravel-judgment/blob/main/docs/adr/0005-package-defined-confidence.md">ADR-0005</a>).</li>
+</ul>
+
+<h2 id="caching">Caching</h2>
+<p>A Judgment can reuse the Assessment of identical Evidence and Questions instead of paying for another Engine round. Caching is off by default. Opt in with <code>cacheFor()</code>, returning seconds, a <code>DateInterval</code> or an expiry:</p>
+<pre><code class="language-php">public function cacheFor(): int
+{
+    return 3600;
+}
+</code></pre>
+<p>The cache key covers:</p>
+<ul>
+  <li>the Judgment class;</li>
+  <li>its question fingerprint;</li>
+  <li>the Evidence fingerprint and the paths of its untrusted text;</li>
+  <li>the Engine class, the connection asked, and its pinned <code>model()</code>.</li>
+</ul>
+<p>Changing a Question’s wording or criteria, the Evidence (including marking text as untrusted), the Engine, the connection or its pinned model misses the cache.</p>
+<p>A cache hit is never a silent copy. It is stored as a new record pointing at the original record through <code>cached_from_id</code>. It carries the original’s Provenance (engine, model, request id), but not the Provenance details: the token usage and raw response stay on the original only, so a hit is never counted as a second Engine round.</p>
+<pre><code class="language-php">$record-&gt;cachedFrom;   // the original AssessmentRecord; null for an Engine answer, or once the original is pruned
+</code></pre>
+<p>A hit is its own Assessment: it fires <code>AssessmentCompleted</code> with its own record, and deciding it records its own Outcome and, if that Outcome requires it, its own Review. It logs <code>Judgment assessed from cache.</code> instead of <code>Judgment assessed.</code>.</p>
+<p>Nothing is cached when the Engine fails. Cached Assessments go to the application’s default cache store, which holds the answers and the engine, model and request id, never the Evidence. Caching works with persistence off too. Something cached while persistence was off is not reused once it is on, since a hit would have no original record to point at. <code>Judge::fake()</code> answers from its scripts and never caches.</p>
+
+<h2 id="persisted-assessments">Persisted Assessments</h2>
+<p>Every Assessment is recorded as an <code>RobertoGallea\Judgment\Models\AssessmentRecord</code> in the <code>judgment_assessments</code> table, for audit, replay and Calibration. The Assessment itself stays an immutable value with no database behind it. A record stores:</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Column</th><th>What</th></tr></thead>
+  <tbody>
+    <tr><td><code>judgment</code></td><td>the Judgment class</td></tr>
+    <tr><td><code>subject_type</code>, <code>subject_id</code></td><td>the Subject, polymorphic</td></tr>
+    <tr><td><code>evidence</code>, <code>evidence_fingerprint</code></td><td>the Evidence as the Engine was asked (untrusted text as plain text), and its SHA-256</td></tr>
+    <tr><td><code>untrusted_paths</code></td><td>the dotted paths of the untrusted text, e.g. <code>["request.explanation"]</code></td></tr>
+    <tr><td><code>language</code></td><td>the Evidence language the Judgment declares</td></tr>
+    <tr><td><code>questions_fingerprint</code></td><td>a SHA-256 of each Question’s key, kind, instructions and criteria (labels, levels, meanings)</td></tr>
+    <tr><td><code>answers</code></td><td>the probabilities, per Question</td></tr>
+    <tr><td><code>engine</code>, <code>model</code>, <code>request_id</code>, <code>provenance_details</code></td><td>the Provenance</td></tr>
+    <tr><td><code>cached_from_id</code></td><td>for a <a href="#caching">cache hit</a>, the record the Engine’s Assessment was first stored as</td></tr>
+    <tr><td><code>decision</code>, <code>decision_version</code>, <code>outcome_type</code>, <code>outcome</code></td><td>the Decision last applied, and its Outcome’s enum and value</td></tr>
+    <tr><td><code>review_requested_at</code></td><td>when an Outcome requiring Review put the record in Review</td></tr>
+    <tr><td><code>resolution</code>, <code>resolver_type</code>, <code>resolver_id</code>, <code>resolved_at</code></td><td>the reviewer’s Resolution, who recorded it, and when</td></tr>
+  </tbody>
+</table></div>
+
+<h3 id="subject-and-language">Subject and language</h3>
+<p>The Subject is the only Eloquent model among the Judgment’s public instance properties. If the Judgment has none, or more than one, or the model is not saved yet, no Subject is recorded. Override <code>subject()</code> to choose it. The language is not detected or translated. A Judgment declares it by overriding <code>language()</code>:</p>
+<pre><code class="language-php">public function language(): ?string
+{
+    return $this-&gt;refund-&gt;locale;
+}
+</code></pre>
+<p>Add <code>HasAssessments</code> to the Subject’s model to reach its records:</p>
+<pre><code class="language-php">use RobertoGallea\Judgment\Concerns\HasAssessments;
+
+class Refund extends Model
+{
+    use HasAssessments;
+}
+
+$refund-&gt;assessments;                                    // every record, of every Judgment
+$record = $refund-&gt;latestAssessment(RefundAbuse::class); // or null
+</code></pre>
+
+<h3 id="decision-versions">Decision versions</h3>
+<p>The Decision, its version and its Outcome are written when you call <code>outcome()</code> or <code>decide()</code> on the Assessment that <code>assess()</code> returned. A Decision declares a version with a <code>version()</code> method. Bump it when you change the thresholds, so Calibration never mixes the two:</p>
+<pre><code class="language-php">final class RefundDecision implements Decision
+{
+    public function __invoke(Assessment $assessment, RefundAbuse $judgment): RefundOutcome { /* ... */ }
+
+    public function version(): string
+    {
+        return '2';
+    }
+}
+</code></pre>
+
+<h3 id="replaying-an-assessment">Replaying an Assessment</h3>
+<p>A record rebuilds its Assessment, so you can apply another Decision to past answers:</p>
+<pre><code class="language-php">$assessment = $record-&gt;assessment();                         // constructs RefundAbuse with the recorded Subject
+$assessment = $record-&gt;assessment(new RefundAbuse($refund)); // or over a Judgment you construct
+
+$assessment-&gt;decide(new StrictRefundDecision());
+</code></pre>
+<p>A rebuilt Assessment is not linked to its record, so deciding it never overwrites the recorded Outcome. Rebuilding throws <code>UnrebuildableAssessment</code> in three cases: the record belongs to another Judgment, the Judgment’s Questions have changed since it was recorded (the fingerprints differ), or there is no Subject to construct the Judgment with.</p>
+
+<h3 id="persistence-configuration">Configuration and pruning</h3>
+<p>Persistence is configured under <code>judgment.persistence</code>:</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Key</th><th>Env</th><th>Default</th><th></th></tr></thead>
+  <tbody>
+    <tr><td><code>enabled</code></td><td><code>JUDGMENT_PERSIST</code></td><td><code>true</code></td><td>record Assessments at all</td></tr>
+    <tr><td><code>required</code></td><td><code>JUDGMENT_PERSIST_REQUIRED</code></td><td><code>true</code></td><td>refuse an Assessment or Outcome that cannot be recorded; see <a href="#when-recording-fails">When recording fails</a></td></tr>
+    <tr><td><code>evidence</code></td><td><code>JUDGMENT_PERSIST_EVIDENCE</code></td><td><code>true</code></td><td><code>false</code> stores only the Evidence fingerprint and untrusted paths, e.g. when the Evidence holds personal data</td></tr>
+    <tr><td><code>retention_days</code></td><td><code>JUDGMENT_RETENTION_DAYS</code></td><td><code>365</code></td><td>records older than this are pruned; <code>null</code> keeps them forever</td></tr>
+  </tbody>
+</table></div>
+<p>Pruning uses Laravel’s <code>model:prune</code>. The package’s model is not in <code>app/Models</code>, so name it when you schedule the command:</p>
+<pre><code class="language-php">Schedule::command('model:prune', ['--model' =&gt; [AssessmentRecord::class]])-&gt;daily();
+</code></pre>
+
+<h3 id="when-recording-fails">When recording fails</h3>
+<p>Recording can fail after the Engine has answered: the migration has not been run, the database is down, a constraint is violated. By default auditing is mandatory, so nothing unrecorded is acted on (<a href="https://github.com/robertogallea/laravel-judgment/blob/main/docs/adr/0013-recording-is-required-by-default.md">ADR-0013</a>):</p>
+<ul>
+  <li><code>assess()</code> throws <code>RobertoGallea\Judgment\Exceptions\AssessmentNotRecorded</code>, whatever <code>judgment.throw_on_failure</code> says. The Engine did answer, so this is not an Unassessed Judgment. Nothing is cached and <code>AssessmentCompleted</code> is not fired.</li>
+  <li><code>outcome()</code> and <code>decide()</code> throw it when the Outcome cannot be written. The Outcome is not logged as decided and Review is not announced.</li>
+</ul>
+<p>The exception wraps the database error and keeps the Assessment, so the paid answers are not lost:</p>
+<pre><code class="language-php">try {
+    $outcome = $judgment-&gt;assess()-&gt;outcome();
+} catch (AssessmentNotRecorded $e) {
+    $e-&gt;assessment;     // the answers, not to be acted on
+    $e-&gt;getPrevious();  // the QueryException
+}
+</code></pre>
+<p>Deciding <code>$e->assessment</code> throws <code>AssessmentNotRecorded</code> too, so its Outcome is never acted on either.</p>
+<p>Set <code>JUDGMENT_PERSIST_REQUIRED=false</code> to make auditing best-effort and keep working through a database outage. A recording failure is then passed to <code>report()</code> and logged as <code>Judgment not recorded.</code>, and <code>assess()</code> returns the Assessment as usual. <code>AssessmentCompleted</code> and <code>AssessmentAwaitingReview</code> still fire, with a null <code>$record</code>. The audit trail has a gap for each such failure.</p>
+
+<h2 id="queued-assessment">Queued assessment</h2>
+
+<h3 id="latency">Latency</h3>
+<p><code>assess()</code> blocks for a whole Engine round. Measured against Jev from the EU, a round takes about 0.7 s at the median and 0.8 s at the 95th percentile, and reached 1.6 s at worst. Retries after a rate limit or overload add their wait on top. That is acceptable where a person is waiting for the answer anyway, such as a support agent opening a ticket. Anywhere else, such as a checkout or a form submission, dispatch the Judgment and act on the Outcome from a listener.</p>
+
+<h3 id="dispatching">Dispatching</h3>
+<p>Assess a Judgment off the request cycle:</p>
+<pre><code class="language-php">use RobertoGallea\Judgment\Facades\Judge;
+
+Judge::dispatch(new RefundAbuse($refund));
+(new RefundAbuse($refund))-&gt;dispatch()-&gt;onQueue('judgments')-&gt;delay(now()-&gt;addMinute());
+</code></pre>
+<p>Both return Laravel’s <code>PendingDispatch</code>, so you can chain <code>onConnection()</code>, <code>onQueue()</code> and <code>delay()</code>. The queued job assesses the Judgment and fires the same <code>AssessmentCompleted</code> and <code>AssessmentFailed</code> events as <code>assess()</code>. With <code>judgment.throw_on_failure</code> on (the default) a failed assessment fails the job. With it off the job completes. An Assessment that cannot be recorded fails the job while <a href="#when-recording-fails">recording is required</a>, whatever <code>judgment.throw_on_failure</code> says. Its answers are lost with the job, and each retry is another paid Engine round.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Key</th><th>Env</th><th>Default</th><th></th></tr></thead>
+  <tbody>
+    <tr><td><code>queue.connection</code></td><td><code>JUDGMENT_QUEUE_CONNECTION</code></td><td><code>null</code></td><td>the application’s default connection</td></tr>
+    <tr><td><code>queue.queue</code></td><td><code>JUDGMENT_QUEUE</code></td><td><code>null</code></td><td>the connection’s default queue</td></tr>
+    <tr><td><code>queue.tries</code></td><td><code>JUDGMENT_QUEUE_TRIES</code></td><td><code>1</code></td><td>each attempt is a paid Engine round, and the Jev driver already retries rate-limited and overloaded requests</td></tr>
+  </tbody>
+</table></div>
+
+<h3 id="what-is-serialised">What is serialised</h3>
+<p>A Judgment is queued like a Mailable. The Eloquent models and Eloquent Collections held directly in its properties are serialised by reference and fetched fresh from the database when the job runs, so the Evidence is read as it is then, not as it was when dispatched. Anything else is serialised whole:</p>
+<ul>
+  <li>A model nested inside an array or another object comes back as it was at dispatch.</li>
+  <li>A closure cannot be queued at all.</li>
+  <li>Laravel restores only the private properties declared on the Judgment’s own class, not on a parent class between it and <code>Judgment</code>. Make those protected.</li>
+</ul>
+<p>If the Subject is deleted before the job runs, the job fails with a <code>ModelNotFoundException</code> while being restored. No <code>AssessmentFailed</code> fires, because there is no Judgment left to assess.</p>
+
+<h3 id="deciding-after-the-queue">Deciding after the queue</h3>
+<p>A queued listener of <code>AssessmentCompleted</code> receives a copy of the Assessment, which is no longer linked to its record. To record the Outcome, decide through the record the event carries:</p>
+<pre><code class="language-php">final class ActOnRefundAbuse implements ShouldQueue
+{
+    public function handle(AssessmentCompleted $event): void
+    {
+        $outcome = $event-&gt;record?-&gt;outcome();                          // the default Decision, recorded
+        // or $event-&gt;record?-&gt;decide(new StrictRefundDecision());      // another Decision, recorded
+    }
+}
+</code></pre>
+<p>Which call records the Outcome:</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Where</th><th>Call</th><th>Records the Outcome</th></tr></thead>
+  <tbody>
+    <tr><td>The same process as <code>assess()</code></td><td><code>$assessment->outcome()</code> / <code>->decide()</code></td><td>yes</td></tr>
+    <tr><td>Across a queue boundary</td><td><code>$record->outcome()</code> / <code>->decide()</code></td><td>yes</td></tr>
+    <tr><td>What-if or Calibration</td><td><code>$record->assessment()->decide()</code></td><td>no</td></tr>
+  </tbody>
+</table></div>
+<p>Like <code>assessment()</code>, the record’s <code>outcome()</code> and <code>decide()</code> take an optional Judgment to rebuild over.</p>
+
+<h2 id="review-and-resolution">Review and Resolution</h2>
+<p>An Outcome whose <code>requiresReview()</code> returns true, like <code>RefundOutcome::Escalate</code> in <a href="#deciding">Deciding</a>, needs a person to decide before its Action is taken.</p>
+<p>When a recorded Decision yields such an Outcome (through <code>outcome()</code> or <code>decide()</code>, as in the <a href="#deciding-after-the-queue">table above</a>), the record enters Review and <code>AssessmentAwaitingReview</code> fires. A record enters Review once, even when two copies of it are decided at the same moment. From then on it keeps the Outcome and Decision that sent it to Review: deciding it again records nothing and fires no event. A what-if on a rebuilt Assessment never starts Review. The package ships no review UI.</p>
+<p>The event carries <code>$judgment</code>, <code>$assessment</code>, <code>$outcome</code>, <code>$record</code> and <code>$requestedAt</code>. <code>$record</code> is null when persistence is off or under <code>Judge::fake()</code>, and a record is needed to resolve.</p>
+
+<h3 id="notifying-reviewers">Recipe: notifying reviewers</h3>
+<p>Listen for <code>AssessmentAwaitingReview</code> and send an ordinary Laravel notification. Queue the listener, so a slow mail server never holds up the request that decided the Outcome:</p>
+<pre><code class="language-php">use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Support\Facades\Notification;
+use RobertoGallea\Judgment\Events\AssessmentAwaitingReview;
+
+final class NotifyReviewers implements ShouldQueue
+{
+    public function handle(AssessmentAwaitingReview $event): void
+    {
+        if ($event-&gt;record === null) {
+            return; // persistence is off: nothing to resolve
+        }
+
+        if ($event-&gt;judgment instanceof RefundAbuse) {
+            Notification::send(User::refundReviewers()-&gt;get(), new RefundNeedsReview($event-&gt;record));
+        }
+    }
+}
+</code></pre>
+<p>With Laravel’s event discovery the listener is registered by its type hint. Otherwise register it in a service provider: <code>Event::listen(AssessmentAwaitingReview::class, NotifyReviewers::class)</code>.</p>
+<p>The notification carries the record, which holds everything a reviewer needs: the Subject, the Evidence as the Engine saw it, the answers and the automatic Outcome.</p>
+<pre><code class="language-php">use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Notifications\Notification;
+use RobertoGallea\Judgment\Models\AssessmentRecord;
+
+final class RefundNeedsReview extends Notification
+{
+    public function __construct(public readonly AssessmentRecord $record) {}
+
+    public function via(object $notifiable): array
+    {
+        return ['mail'];
+    }
+
+    public function toMail(object $notifiable): MailMessage
+    {
+        return (new MailMessage)
+            -&gt;subject('A refund needs review')
+            -&gt;line("Refund #{$this-&gt;record-&gt;subject_id} was sent to Review as {$this-&gt;record-&gt;outcome}.")
+            -&gt;action('Review it', route('refund-reviews.show', $this-&gt;record));
+    }
+}
+</code></pre>
+<p>Find the records awaiting Review with the <code>awaitingReview</code> scope, for example to build the review queue that link opens:</p>
+<pre><code class="language-php">AssessmentRecord::awaitingReview()-&gt;where('judgment', RefundAbuse::class)-&gt;oldest('review_requested_at')-&gt;get();
+$record-&gt;isAwaitingReview();
+</code></pre>
+
+<h3 id="resolving">Resolving</h3>
+<p>A reviewer records the Resolution, a case of the same Outcome enum, which may overturn the automatic Outcome:</p>
+<pre><code class="language-php">$record-&gt;resolve(RefundOutcome::Approve, $request-&gt;user());
+</code></pre>
+<p>Who may resolve is up to your application, through the <code>resolve</code> ability of an ordinary Policy on <code>AssessmentRecord</code>. Until you define one, every reviewer is refused with an <code>AuthorizationException</code>:</p>
+<pre><code class="language-php">use RobertoGallea\Judgment\Models\AssessmentRecord;
+
+final class AssessmentRecordPolicy
+{
+    public function resolve(User $user, AssessmentRecord $record): bool
+    {
+        return $user-&gt;can_review &amp;&amp; $record-&gt;judgment === RefundAbuse::class;
+    }
+}
+
+Gate::policy(AssessmentRecord::class, AssessmentRecordPolicy::class); // e.g. in AppServiceProvider::boot()
+</code></pre>
+<p><code>resolve()</code> throws <code>InvalidResolution</code> if the record is not awaiting Review or is already resolved, or if the Resolution is a case of another enum or itself requires Review. It checks and records in a single conditional update, so when two reviewers resolve the same record at once, only the first is recorded. The record keeps both Outcomes: <code>outcome</code> for the automatic one, <code>resolution</code> and <code>resolver</code> for the person’s.</p>
+<p>Once recorded, <code>AssessmentResolved</code> fires with <code>$record</code>, <code>$outcome</code> (the automatic Outcome), <code>$resolution</code> and <code>$reviewer</code>. Perform the Action for the Resolution there:</p>
+<pre><code class="language-php">public function handle(AssessmentResolved $event): void
+{
+    match ($event-&gt;resolution) {
+        RefundOutcome::Approve =&gt; $this-&gt;refunds-&gt;approve($event-&gt;record-&gt;subject),
+        RefundOutcome::Reject =&gt; $this-&gt;refunds-&gt;reject($event-&gt;record-&gt;subject),
+        RefundOutcome::Escalate =&gt; null,
+    };
+}
+</code></pre>
+
+<h2 id="calibration">Calibration</h2>
+<p>An Engine’s probabilities differ per Question, so each threshold should come from evidence. <code>judgment:eval</code> asks the configured Engine about labelled cases, applies the Decision to each answer, and reports how the Decision’s thresholds behave:</p>
+<pre><code class="language-bash">php artisan judgment:eval RefundAbuse                                   # past Resolutions are the labels
+php artisan judgment:eval RefundAbuse --dataset=storage/refunds.json    # a labelled dataset
+php artisan judgment:eval RefundAbuse --decision=RefundDecision --decision=StrictRefundDecision
+php artisan judgment:eval RefundAbuse --engine=jev --engine=jev-next    # compare two pinned models
+</code></pre>
+<p>A bare Judgment name is looked up under <code>App\Judgments</code>, and a bare Decision name under <code>App\Decisions</code>.</p>
+
+<h3 id="calibration-labels">Labels and datasets</h3>
+<p>Without <code>--dataset</code>, the Judgment’s resolved <code>AssessmentRecord</code>s are the cases: one per Evidence, labelled with its latest Resolution. Only Assessments sent to Review get a Resolution, so these labels cluster where the Decision was unsure; add a dataset to cover the confident bands. Each case is asked over the Evidence as it was recorded, with untrusted text marked again. When the Evidence was not stored, it is asked over the Subject’s current Evidence. A record whose Subject no longer exists is skipped, and the report says how many were.</p>
+<p>A dataset is a JSON list of cases. Each case gives a Subject, either as attributes (built unsaved) or as a key (found), and the Outcome value a person says is right:</p>
+<pre><code class="language-json">[
+    {"subject": {"item": "Headphones", "amount": 120, "explanation": "Arrived damaged."}, "expected": "approve"},
+    {"subject": 42, "expected": "reject"}
+]
+</code></pre>
+<p>A dataset works with a Judgment constructed with an Eloquent model. An expected Outcome that is not a value of the Decision’s Outcome enum stops the run, so a typo cannot quietly lower accuracy. So does one that requires Review, which no Resolution can be.</p>
+<p><strong>Decisions.</strong> A set of thresholds is a Decision, so compare candidates by passing several <code>--decision</code> options. Without the option, the Judgment’s default Decision applies. Nothing is cached, recorded, logged or announced. A case the Engine fails on is counted as unassessed, under the model version the Engine reported for the other cases.</p>
+<p><strong>Engines.</strong> Each <code>--engine</code> names a connection in <code>judgment.engines</code>. Every case is asked of each one, so two pinned model versions are compared on the same cases. Without the option, each Judgment’s own Engine is asked.</p>
+
+<h3 id="calibration-report">The report</h3>
+<p>Results are grouped by question-set fingerprint, model version, Decision and version, and Evidence language, and groups are never mixed (<a href="https://github.com/robertogallea/laravel-judgment/blob/main/docs/adr/0008-pinned-models-and-assessment-fingerprints.md">ADR-0008</a>). A summary table gives one row per group:</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Column</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>Questions</td><td>the first characters of the question-set fingerprint</td></tr>
+    <tr><td>Cases, Unassessed</td><td>the cases asked, and how many of them the Engine failed on</td></tr>
+    <tr><td>Review rate</td><td>the share of assessed cases whose Outcome requires Review</td></tr>
+    <tr><td>Accuracy</td><td>the share of Outcomes decided without Review that match the label, with the counts</td></tr>
+  </tbody>
+</table></div>
+<p>Accuracy leaves out cases sent to Review, because a person decides those. Loosening a threshold trades Review rate against accuracy.</p>
+<p>For each group, a band table then splits the cases by tenths of each answer (<code>0.4–0.5</code> includes 0.4 but not 0.5; the last band includes 1.0). A Likelihood is split by its probability, each Likelihood of a Set by its own probability (<code>flags.hate</code>), and a Classification or Rating by its Confidence. Each band shows its cases, the labels they carry, and the Decision’s accuracy and Review rate there. A band whose labels are mixed is where a threshold belongs, or where Review earns its cost:</p>
+<pre><code class="language-none">ReviewedReturnDecision · jev-1.13.0 · en · questions 3f2a9c1b
+| Question   | Band    | Cases | Expected             | Accuracy | Review rate |
+| abusive    | 0.1–0.2 | 14    | approve 14           | 100.0%   | 0.0%        |
+| abusive    | 0.4–0.5 | 6     | approve 2, reject 4  | —        | 100.0%      |
+| abusive    | 0.9–1.0 | 9     | reject 9             | 100.0%   | 0.0%        |
+</code></pre>
+
+<h2 id="coding-agents-laravel-boost" data-nav="Coding agents">Coding agents (Laravel Boost)</h2>
+<p>The package ships <a href="https://github.com/laravel/boost">Laravel Boost</a> resources, so a coding agent can write Judgments and Decisions from a plain-language description:</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Resource</th><th>What it teaches the agent</th></tr></thead>
+  <tbody>
+    <tr><td>Guideline</td><td>when a criterion is a Judgment rather than a rule, the Judgment → Assessment → Decision → Outcome layers, and where thresholds come from</td></tr>
+    <tr><td><code>laravel-judgment-creating-judgments</code> skill</td><td>declaring the Subject, the Evidence (with untrusted text marked) and the Questions, rewriting action-shaped questions into questions about the world, and a test of the declaration</td></tr>
+    <tr><td><code>laravel-judgment-creating-decisions</code> skill</td><td>the Outcome enum and which Outcomes require Review, the Decision’s <code>match</code> arms, a test per arm with a stated threshold, and help with Calibration</td></tr>
+  </tbody>
+</table></div>
+<p>With Boost 2 installed, run <code>php artisan boost:install</code> (or <code>boost:update</code> in an app that already uses Boost) and select this package among the third-party guidelines and skills. Then ask for what you need:</p>
+<blockquote><p>Flag refund requests whose explanation looks like an attempt to abuse the refund policy. Reject the obvious ones above 0.8, send the borderline ones to a person, and escalate customers with three or more refunds this year.</p></blockquote>
+<p>The agent generates the classes with <code>make:judgment</code> and <code>make:decision</code> and fills them in. It never invents a threshold: a Decision holds only the numbers you state, marked as not calibrated, and every other arm stays a placeholder that throws until you fill it. For Calibration it drafts a dataset from your examples in <code>database/calibration/</code>, gives you the <code>judgment:eval</code> command to run (each case is a paid Engine call, so the agent never runs it), and proposes thresholds from the report you paste back.</p>
+
+<h2 id="events-and-logging">Events and logging</h2>
+<p>Every assessment fires an event:</p>
+<ul>
+  <li><code>RobertoGallea\Judgment\Events\AssessmentCompleted</code>, with <code>$judgment</code>, <code>$assessment</code> and <code>$record</code> (the <code>AssessmentRecord</code>, or null when persistence is off, best-effort recording failed, or under <code>Judge::fake()</code>)</li>
+  <li><code>RobertoGallea\Judgment\Events\AssessmentFailed</code>, with <code>$judgment</code> and <code>$exception</code>, whether or not the failure is thrown</li>
+</ul>
+<p>The Review lifecycle fires two more: <code>AssessmentAwaitingReview</code> and <code>AssessmentResolved</code> (see <a href="#review-and-resolution">Review and Resolution</a>).</p>
+<p>The package also writes log entries you can trace an assessment by:</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Message</th><th>Level</th><th>Context</th></tr></thead>
+  <tbody>
+    <tr><td><code>Judgment assessed.</code></td><td>info</td><td><code>judgment</code>, <code>engine</code>, <code>model</code>, <code>request_id</code></td></tr>
+    <tr><td><code>Judgment unassessed.</code></td><td>warning</td><td><code>judgment</code>, <code>exception</code>, plus <code>engine</code>, <code>model</code>, <code>request_id</code> when the Engine responded</td></tr>
+    <tr><td><code>Judgment assessed from cache.</code></td><td>info</td><td>as <code>Judgment assessed.</code>, plus <code>cached_from</code>: the original record’s id</td></tr>
+    <tr><td><code>Judgment decided.</code></td><td>info</td><td><code>judgment</code>, <code>engine</code>, <code>model</code>, <code>request_id</code>, <code>decision</code>, <code>outcome</code></td></tr>
+    <tr><td><code>Judgment not recorded.</code></td><td>warning</td><td><code>judgment</code>, <code>engine</code>, <code>model</code>, <code>request_id</code>, <code>exception</code>, when <a href="#when-recording-fails">recording is best-effort</a> and fails</td></tr>
+  </tbody>
+</table></div>
+<p>They go to the default log channel. Set <code>JUDGMENT_LOG_CHANNEL</code> to send them elsewhere, or <code>JUDGMENT_LOG=false</code> to turn them off. <code>$assessment->logContext()</code> returns the same context for your own log entries.</p>
+
+<h2 id="testing">Testing</h2>
+<p>The package ships two fakes. Both are strict: a test cannot pass by reading an answer nobody scripted. No test needs a real Engine, and none should call one: its answers are not repeatable, so a test that depends on them would be flaky.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>You are testing</th><th>Use</th><th>Engine</th><th>Database</th></tr></thead>
+  <tbody>
+    <tr><td>A Decision: its thresholds and the order of its arms</td><td><code>Assessment::fake()</code></td><td>none</td><td>none</td></tr>
+    <tr><td>Code that assesses or dispatches a Judgment and acts on the Outcome</td><td><code>Judge::fake()</code></td><td>blocked</td><td>not needed for the Assessments</td></tr>
+  </tbody>
+</table></div>
+
+<h3 id="assessment-fake" data-nav="Assessment::fake()">Unit-testing a Decision with <code>Assessment::fake()</code></h3>
+<p>Script the answers of a Judgment’s Questions, with no Engine and no database:</p>
+<pre><code class="language-php">use RobertoGallea\Judgment\Assessment;
+
+$assessment = Assessment::fake(new RefundAbuse($refund))
+    -&gt;likelihood('abusive', .80)
+    -&gt;rating('credibility', 1)
+    -&gt;make();
+
+expect($assessment-&gt;outcome())-&gt;toBe(RefundOutcome::Reject);
+</code></pre>
+<p>Write one test per arm of the Decision, each scripting answers that should reach that arm and no earlier one. A test named after the arm it covers reads as the Decision’s specification, and it fails when someone reorders the arms:</p>
+<pre><code class="language-php">it('sends a frequent claimant to Review, whatever the Engine thinks of the claim', function () {
+    $refund = Refund::factory()-&gt;for(Customer::factory()-&gt;withRefundsThisYear(3))-&gt;create();
+
+    $assessment = Assessment::fake(new RefundAbuse($refund))
+        -&gt;likelihood('abusive', .05)
+        -&gt;rating('credibility', [0, 0, .3, .7])                           // expected level 2.7: credible
+        -&gt;make();
+
+    expect($assessment-&gt;outcome())-&gt;toBe(RefundOutcome::Escalate);
+});
+</code></pre>
+<p>Script a Rating by its probability per level when the Decision reads <code>expected()</code>, so the test states the exact value the threshold is compared against.</p>
+<p>Every Question kind can be scripted:</p>
+<pre><code class="language-php">Assessment::fake(new SupportTicket($ticket))
+    -&gt;classification('department', Department::Billing, confidence: .9)   // winning label, beating the runner-up by .9
+    -&gt;classification('language', ['english' =&gt; .15, 'italian' =&gt; .85])   // or a probability per label (unlisted: 0)
+    -&gt;rating('severity', 2, confidence: .9)                               // most probable level, from 0
+    -&gt;rating('severity', [0, .5, .5, 0])                                  // or a probability per level
+    -&gt;make();
+
+Assessment::fake(new PostModeration($post))
+    -&gt;likelihoodSet('harms', ['spam' =&gt; .90])                             // a Likelihood per label (unlisted: 0)
+    -&gt;make();
+
+Assessment::fake(new RefundAbuse($refund))-&gt;answers(['abusive' =&gt; .80, 'credibility' =&gt; 1]); // several at once
+</code></pre>
+<p>Each scripted answer is checked against the Judgment’s declared Questions: an undeclared key, the wrong kind, an undeclared label, a level outside the scale, or a probability or Confidence outside 0 to 1 throws. A Decision that reads a Question the test did not script throws <code>UnscriptedQuestion</code>.</p>
+<p>A fake Assessment runs each Decision twice and throws <code>ImpureDecision</code> if the two Outcomes differ, catching a Decision whose Outcome depends on the clock, the database or its own state rather than its Assessment.</p>
+
+<h3 id="judge-fake" data-nav="Judge::fake()">Feature-testing with <code>Judge::fake()</code></h3>
+<p>Swap the Judge for a fake that answers each Judgment from a script:</p>
+<pre><code class="language-php">use RobertoGallea\Judgment\Facades\Judge;
+
+Judge::fake([
+    RefundAbuse::class =&gt; ['abusive' =&gt; .80, 'credibility' =&gt; 1],                     // static answers
+    SupportTicket::class =&gt; fn (SupportTicket $judgment) =&gt; [                         // a closure given the Judgment
+        'department' =&gt; $judgment-&gt;ticket-&gt;subject === 'Invoice' ? 'billing' : 'other',
+    ],
+    PostModeration::class =&gt; Judge::sequence(['harms' =&gt; ['spam' =&gt; .9]], ['harms' =&gt; []]), // one script per assessment
+]);
+</code></pre>
+<p>Answers are written as in <code>answers()</code> above. A feature test scripts the answers, exercises the application, and asserts on what the application did with the Outcome:</p>
+<pre><code class="language-php">it('rejects an abusive refund request', function () {
+    Judge::fake([RefundAbuse::class =&gt; ['abusive' =&gt; .80, 'credibility' =&gt; 1]]);
+    $refund = Refund::factory()-&gt;create();
+
+    $this-&gt;post(route('refunds.submit', $refund))-&gt;assertRedirect();
+
+    expect($refund-&gt;fresh()-&gt;status)-&gt;toBe('rejected');
+    Judge::assertAssessed(RefundAbuse::class, fn (RefundAbuse $judgment) =&gt; $judgment-&gt;refund-&gt;is($refund));
+});
+</code></pre>
+<p>A closure can also return an <code>Assessment::fake($judgment)</code> builder, or throw an <code>EngineFailed</code> to test failure handling: the fake then fires <code>AssessmentFailed</code> and throws or returns <code>Unassessed</code> as <code>judgment.throw_on_failure</code> says.</p>
+<p>Assessing a Judgment with no script throws <code>UnscriptedJudgment</code>, and a sequence that runs out throws <code>ExhaustedSequence</code>. While the fake is active every Engine connection throws <code>RealEngineCallPrevented</code>, so no test reaches a real Engine. Assessments from the fake fire <code>AssessmentCompleted</code> and check every Decision for purity, like <code>Assessment::fake()</code>. They are not recorded, so a feature test needs no migration for them.</p>
+<p>Assert what was assessed:</p>
+<pre><code class="language-php">Judge::assertAssessed(RefundAbuse::class);
+Judge::assertAssessed(RefundAbuse::class, fn (RefundAbuse $judgment) =&gt; $judgment-&gt;refund-&gt;is($refund));
+Judge::assertNotAssessed(ProductReview::class);
+Judge::assertNothingAssessed();
+</code></pre>
+<p>Assert that a Decision applied to a faked Assessment sent it to Review. The callback receives the Judgment and the Outcome:</p>
+<pre><code class="language-php">Judge::assertAwaitingReview(RefundAbuse::class);
+Judge::assertAwaitingReview(RefundAbuse::class, fn (RefundAbuse $judgment, RefundOutcome $outcome) =&gt; $outcome === RefundOutcome::Escalate);
+</code></pre>
+<p>A faked Assessment is not recorded, so it cannot be resolved. <code>AssessmentAwaitingReview</code> still fires, with a null <code>$record</code>. A Decision unit test on <code>Assessment::fake()</code> never enters Review.</p>
+<p>The fake dispatches Judgments through the queue like the Judge. On the sync queue the job runs and the fake answers from its script. Under <code>Queue::fake()</code> nothing runs. Either way you can assert what was dispatched:</p>
+<pre><code class="language-php">Judge::assertDispatched(RefundAbuse::class);
+Judge::assertDispatched(RefundAbuse::class, fn (RefundAbuse $judgment) =&gt; $judgment-&gt;refund-&gt;is($refund));
+Judge::assertNotDispatched(ProductReview::class);
+</code></pre>
+
+<h2 id="package-development">Package development</h2>
+<pre><code class="language-bash">composer test      # Pest
+composer analyse   # PHPStan
+composer lint      # Pint (composer format to fix)
+</code></pre>
+
+<footer>
+  Laravel Judgment is open-source software licensed under the MIT license.
+  <a href="https://github.com/robertogallea/laravel-judgment">Source on GitHub</a> ·
+  <a href="https://github.com/robertogallea/laravel-judgment/tree/main/docs/adr">Architecture decision records</a>
+</footer>
+
+</div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup-templating.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-php.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-ini.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+<script>
+(function () {
+  // Left menu, built from the headings: an h3 nests under the h2 before it,
+  // and the h3s before the first h2 under Introduction. data-nav shortens a label.
+  var nav = document.getElementById('nav');
+  function item(href, label) {
+    var li = document.createElement('li');
+    var a = document.createElement('a');
+    a.href = href;
+    a.textContent = label;
+    li.appendChild(a);
+    return li;
+  }
+  var group = item('#introduction', 'Introduction'), sub = null;
+  nav.appendChild(group);
+  document.querySelectorAll('main h2[id], main h3[id]').forEach(function (h) {
+    var label = h.dataset.nav || h.textContent.trim();
+    if (h.tagName === 'H2') {
+      group = item('#' + h.id, label);
+      sub = null;
+      nav.appendChild(group);
+      return;
+    }
+    if (!sub) {
+      sub = document.createElement('ul');
+      group.appendChild(sub);
+    }
+    sub.appendChild(item('#' + h.id, label));
+  });
+
+  // Copy buttons on code blocks
+  document.querySelectorAll('pre > code').forEach(function (code) {
+    var pre = code.parentElement;
+    var wrap = document.createElement('div');
+    wrap.className = 'code';
+    pre.parentNode.insertBefore(wrap, pre);
+    wrap.appendChild(pre);
+    var btn = document.createElement('button');
+    btn.className = 'copy';
+    btn.type = 'button';
+    btn.textContent = 'Copy';
+    btn.addEventListener('click', function () {
+      navigator.clipboard.writeText(code.textContent).then(function () {
+        btn.textContent = 'Copied';
+        setTimeout(function () { btn.textContent = 'Copy'; }, 1500);
+      });
+    });
+    wrap.appendChild(btn);
+  });
+
+  // Anchor links on headings
+  document.querySelectorAll('main h2[id], main h3[id]').forEach(function (h) {
+    var a = document.createElement('a');
+    a.className = 'anchor';
+    a.href = '#' + h.id;
+    a.textContent = '#';
+    a.setAttribute('aria-label', 'Link to this section');
+    h.appendChild(a);
+  });
+
+  // Mobile menu
+  var btn = document.getElementById('menu-btn');
+  function setOpen(open) {
+    document.body.classList.toggle('nav-open', open);
+    btn.setAttribute('aria-expanded', String(open));
+  }
+  btn.addEventListener('click', function () { setOpen(!document.body.classList.contains('nav-open')); });
+  document.querySelectorAll('.sidebar a').forEach(function (a) {
+    a.addEventListener('click', function () { setOpen(false); });
+  });
+
+  // Highlight the section being read
+  var links = {};
+  document.querySelectorAll('.sidebar a[href^="#"]').forEach(function (a) { links[a.getAttribute('href').slice(1)] = a; });
+  var targets = Object.keys(links).map(function (id) { return document.getElementById(id); }).filter(Boolean);
+  var current = null;
+  function update() {
+    var y = window.scrollY + 90, found = targets[0];
+    for (var i = 0; i < targets.length; i++) {
+      if (targets[i].getBoundingClientRect().top + window.scrollY <= y) found = targets[i];
+    }
+    if (found && found !== current) {
+      if (current) links[current.id].classList.remove('active');
+      current = found;
+      var link = links[current.id];
+      link.classList.add('active');
+      var sb = document.getElementById('sidebar');
+      var r = link.getBoundingClientRect(), s = sb.getBoundingClientRect();
+      if (r.top < s.top || r.bottom > s.bottom) link.scrollIntoView({ block: 'nearest' });
+    }
+  }
+  window.addEventListener('scroll', update, { passive: true });
+  update();
+})();
+</script>
+</body>
+</html>
