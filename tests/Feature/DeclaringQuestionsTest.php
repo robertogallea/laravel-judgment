@@ -6,6 +6,7 @@ use RobertoGallea\Judgment\Questions\Likelihood;
 use RobertoGallea\Judgment\Questions\Rating;
 use RobertoGallea\Judgment\Tests\Fixtures\Department;
 use RobertoGallea\Judgment\Tests\Fixtures\Ticket;
+use RobertoGallea\Judgment\Tests\Fixtures\TicketQuestion;
 
 it('declares Classification labels from a list, without descriptions', function () {
     $question = Classification::of('In which language is the ticket written?', labels: ['english', 'italian']);
@@ -79,3 +80,27 @@ it('refuses duplicate Classification labels', function () {
 it('refuses Classification labels from a class that is not a backed enum', function () {
     Classification::of('Which label fits?', labels: Ticket::class);
 })->throws(InvalidQuestion::class, 'Classification labels must be a list, a label => description map or a backed enum class; '.Ticket::class.' given.');
+
+it('refuses a Likelihood Set whose labels do not supply their questions', function () {
+    Likelihood::each(['hate', 'spam']);
+})->throws(InvalidQuestion::class, 'Each label of a Likelihood Set supplies its complete question: give a label => question map or a backed enum with a question() method.');
+
+it('refuses a Likelihood Set from a backed enum without a question() method', function () {
+    Likelihood::each(TicketQuestion::class);
+})->throws(InvalidQuestion::class, 'Each label of a Likelihood Set supplies its complete question: give a label => question map or a backed enum with a question() method.');
+
+it('refuses a Likelihood Set from a class that is not a backed enum', function () {
+    Likelihood::each(Ticket::class);
+})->throws(InvalidQuestion::class, 'Each label of a Likelihood Set supplies its complete question: give a label => question map or a backed enum with a question() method.');
+
+it('refuses a Likelihood Set without labels', function () {
+    Likelihood::each([]);
+})->throws(InvalidQuestion::class, 'A Likelihood Set needs at least 1 label; 0 given.');
+
+it('refuses a Likelihood Set label whose question is blank', function () {
+    Likelihood::each(['hate' => 'Does the post attack a protected group?', 'spam' => ' ']);
+})->throws(InvalidQuestion::class, 'A Question needs instructions: ask it as a complete question about the Evidence.');
+
+it('refuses a Likelihood Set label containing a dot, which would blur its dotted Engine key', function () {
+    Likelihood::each(['self.harm' => 'Does the post encourage self-harm?']);
+})->throws(InvalidQuestion::class, 'A Likelihood Set label cannot contain a dot; "self.harm" given.');

@@ -6,6 +6,7 @@ use BackedEnum;
 use RobertoGallea\Judgment\Answers\Answer;
 use RobertoGallea\Judgment\Answers\ClassificationAnswer;
 use RobertoGallea\Judgment\Answers\LikelihoodAnswer;
+use RobertoGallea\Judgment\Answers\LikelihoodSetAnswer;
 use RobertoGallea\Judgment\Answers\RatingAnswer;
 use RobertoGallea\Judgment\Contracts\Decision;
 use RobertoGallea\Judgment\Contracts\Outcome;
@@ -15,6 +16,7 @@ use RobertoGallea\Judgment\Exceptions\UndeclaredQuestion;
 use RobertoGallea\Judgment\Exceptions\WrongQuestionKind;
 use RobertoGallea\Judgment\Questions\Classification;
 use RobertoGallea\Judgment\Questions\Likelihood;
+use RobertoGallea\Judgment\Questions\LikelihoodSet;
 use RobertoGallea\Judgment\Questions\Question;
 use RobertoGallea\Judgment\Questions\Rating;
 
@@ -22,7 +24,7 @@ use RobertoGallea\Judgment\Questions\Rating;
 final class Assessment
 {
     /**
-     * @param  array<string, Question>  $questions  as asked, so later changes to the Judgment cannot alter what was assessed
+     * @param  array<string, Question|LikelihoodSet>  $questions  as declared, so later changes to the Judgment cannot alter what was assessed
      * @param  array<string, Answer>  $answers
      */
     public function __construct(
@@ -56,6 +58,14 @@ final class Assessment
         return $answer;
     }
 
+    public function likelihoodSet(string|BackedEnum $key): LikelihoodSetAnswer
+    {
+        $answer = $this->answer($key, LikelihoodSet::class);
+        assert($answer instanceof LikelihoodSetAnswer);
+
+        return $answer;
+    }
+
     /** Apply the Judgment's default Decision. */
     public function outcome(): Outcome
     {
@@ -74,7 +84,7 @@ final class Assessment
         return $decision($this, $this->judgment);
     }
 
-    /** @param  class-string<Question>  $kind */
+    /** @param  class-string<Question|LikelihoodSet>  $kind */
     private function answer(string|BackedEnum $key, string $kind): Answer
     {
         $key = $key instanceof BackedEnum ? (string) $key->value : $key;
