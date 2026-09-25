@@ -12,12 +12,12 @@ final class AssessJudgment implements ShouldQueue
 {
     use Queueable;
 
-    /** Each attempt is a paid Engine round, and the Jev driver already retries rate limits. */
+    /** From judgment.queue.tries, and never below 1: Laravel retries a job with 0 tries without limit. */
     public int $tries;
 
     public function __construct(public readonly Judgment $judgment)
     {
-        $this->tries = (int) config('judgment.queue.tries', 1);
+        $this->tries = max(1, (int) config('judgment.queue.tries', 1));
         $this->onConnection(config('judgment.queue.connection'));
         $this->onQueue(config('judgment.queue.queue'));
     }

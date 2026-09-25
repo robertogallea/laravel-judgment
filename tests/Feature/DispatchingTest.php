@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 use RobertoGallea\Judgment\Contracts\Engine;
@@ -83,4 +84,25 @@ it('tries a queued assessment once, on the configured connection and queue', fun
 
     expect([$configured->tries, $configured->connection, $configured->queue])->toBe([1, 'redis', 'judgments'])
         ->and($chained->queue)->toBe('urgent');
+});
+
+it('never retries a queued assessment without limit', function (mixed $tries) {
+    Queue::fake();
+    config(['judgment.queue.tries' => $tries]);
+
+    returnAbuse()->dispatch();
+
+    expect(Queue::pushed(AssessJudgment::class)->sole()->tries)->toBe(1);
+})->with(['null' => [null], 'empty env' => [''], 'zero' => [0]]);
+
+it('fails the job when the Subject was deleted before it ran', function () {
+    Queue::fake();
+    $judgment = returnAbuse();
+    $judgment->dispatch();
+    $payload = serialize(Queue::pushed(AssessJudgment::class)->sole());
+
+    $judgment->request->delete();
+
+    expect(fn () => unserialize($payload))->toThrow(ModelNotFoundException::class)
+        ->and(Queue::pushed(AssessJudgment::class)->sole()->deleteWhenMissingModels ?? false)->toBeFalse();
 });

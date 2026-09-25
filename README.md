@@ -365,7 +365,13 @@ Judge::dispatch(new RefundAbuse($refund));
 
 Both return Laravel's `PendingDispatch`, so you can chain `onConnection()`, `onQueue()` and `delay()`. The queued job assesses the Judgment and fires the same `AssessmentCompleted` and `AssessmentFailed` events as `assess()`. With `judgment.failure = throw` (the default) a failed assessment fails the job. With `unassessed` the job completes.
 
-A Judgment is queued like a Mailable. Its Eloquent models are serialised by reference and fetched fresh from the database when the job runs, so the Evidence is read as it is then, not as it was when dispatched.
+A Judgment is queued like a Mailable. The Eloquent models and Eloquent Collections held directly in its properties are serialised by reference and fetched fresh from the database when the job runs, so the Evidence is read as it is then, not as it was when dispatched. Anything else is serialised whole:
+
+- A model nested inside an array or another object comes back as it was at dispatch.
+- A closure cannot be queued at all.
+- Laravel restores only the private properties declared on the Judgment's own class, not on a parent class between it and `Judgment`. Make those protected.
+
+If the Subject is deleted before the job runs, the job fails with a `ModelNotFoundException` while being restored. No `AssessmentFailed` fires, because there is no Judgment left to assess.
 
 | Key | Env | Default | |
 | --- | --- | --- | --- |
