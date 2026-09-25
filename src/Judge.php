@@ -15,6 +15,10 @@ class Judge implements JudgeContract
     {
         $request = new EngineRequest($judgment->questions(), $judgment->evidence());
 
+        foreach ($request->questions as $key => $question) {
+            $question->ensureAnswerable($key);
+        }
+
         $response = $this->container->make(Engine::class)->answer($request);
 
         $this->ensureEveryQuestionIsAnswered($judgment, $request, $response);

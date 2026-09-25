@@ -2,16 +2,21 @@
 
 namespace RobertoGallea\Judgment;
 
+use BackedEnum;
 use RobertoGallea\Judgment\Answers\Answer;
+use RobertoGallea\Judgment\Answers\ClassificationAnswer;
 use RobertoGallea\Judgment\Answers\LikelihoodAnswer;
+use RobertoGallea\Judgment\Answers\RatingAnswer;
 use RobertoGallea\Judgment\Contracts\Decision;
 use RobertoGallea\Judgment\Contracts\Outcome;
 use RobertoGallea\Judgment\Exceptions\InvalidDecision;
 use RobertoGallea\Judgment\Exceptions\NoDefaultDecision;
 use RobertoGallea\Judgment\Exceptions\UndeclaredQuestion;
 use RobertoGallea\Judgment\Exceptions\WrongQuestionKind;
+use RobertoGallea\Judgment\Questions\Classification;
 use RobertoGallea\Judgment\Questions\Likelihood;
 use RobertoGallea\Judgment\Questions\Question;
+use RobertoGallea\Judgment\Questions\Rating;
 
 /** The recorded answers to a Judgment's Questions: probabilistic, immutable, free of consequence. */
 final class Assessment
@@ -27,11 +32,26 @@ final class Assessment
         public readonly Provenance $provenance,
     ) {}
 
-    public function likelihood(string $key): LikelihoodAnswer
+    public function likelihood(string|BackedEnum $key): LikelihoodAnswer
     {
-        $this->declared($key, Likelihood::class);
-        $answer = $this->answers[$key];
+        $answer = $this->answer($key, Likelihood::class);
         assert($answer instanceof LikelihoodAnswer);
+
+        return $answer;
+    }
+
+    public function classification(string|BackedEnum $key): ClassificationAnswer
+    {
+        $answer = $this->answer($key, Classification::class);
+        assert($answer instanceof ClassificationAnswer);
+
+        return $answer;
+    }
+
+    public function rating(string|BackedEnum $key): RatingAnswer
+    {
+        $answer = $this->answer($key, Rating::class);
+        assert($answer instanceof RatingAnswer);
 
         return $answer;
     }
@@ -55,12 +75,15 @@ final class Assessment
     }
 
     /** @param  class-string<Question>  $kind */
-    private function declared(string $key, string $kind): void
+    private function answer(string|BackedEnum $key, string $kind): Answer
     {
+        $key = $key instanceof BackedEnum ? (string) $key->value : $key;
         $question = $this->questions[$key] ?? throw UndeclaredQuestion::for($this->judgment, $key, array_keys($this->questions));
 
         if (! $question instanceof $kind) {
             throw WrongQuestionKind::for($this->judgment, $key, $question, $kind);
         }
+
+        return $this->answers[$key];
     }
 }

@@ -29,3 +29,7 @@ it('is between a lower bound it reaches and an upper bound it does not', functio
         ->and(abusiveAnswer(.65)->between(.30, .65))->toBeFalse()
         ->and(abusiveAnswer(.29)->between(.30, .65))->toBeFalse();
 });
+
+it('has no Confidence, its probability being the measure', function () {
+    expect(method_exists(abusiveAnswer(.50), 'confidence'))->toBeFalse();
+});

@@ -3,6 +3,7 @@
 namespace RobertoGallea\Judgment\Tests\Fixtures;
 
 use RobertoGallea\Judgment\Judgment;
+use RobertoGallea\Judgment\Questions\Classification;
 use RobertoGallea\Judgment\Questions\Likelihood;
 
 final class ProductListing extends Judgment
@@ -18,7 +19,7 @@ final class ProductListing extends Judgment
     {
         return [
             'counterfeit' => Likelihood::that('Is the listed product counterfeit?'),
-            'tone' => Opinion::on('The tone of the listing title'),
+            'tone' => Classification::of('What is the tone of the listing title?')->labels(['neutral', 'hyped']),
         ];
     }
 }
