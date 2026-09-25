@@ -8,6 +8,7 @@ use Psr\Log\LoggerInterface;
 use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Contracts\Decision;
 use RobertoGallea\Judgment\Contracts\Outcome;
+use RobertoGallea\Judgment\Exceptions\AssessmentNotRecorded;
 use RobertoGallea\Judgment\Exceptions\EngineFailed;
 use RobertoGallea\Judgment\Judgment;
 use RobertoGallea\Judgment\Provenance;
@@ -45,6 +46,12 @@ final class JudgmentLog
             ...$provenance?->logContext() ?? [],
             'exception' => $exception,
         ]);
+    }
+
+    /** Warned when recording is best-effort and failed, leaving a gap in the audit trail. */
+    public function notRecorded(AssessmentNotRecorded $exception): void
+    {
+        $this->channel()?->warning('Judgment not recorded.', [...$exception->assessment->logContext(), 'exception' => $exception]);
     }
 
     public function decided(Assessment $assessment, Decision $decision, Outcome $outcome): void

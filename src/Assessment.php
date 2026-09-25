@@ -99,8 +99,9 @@ final class Assessment
             throw ImpureDecision::for($decision, $outcome, $again);
         }
 
-        app(JudgmentLog::class)->decided($this, $decision, $outcome);
+        // Recorded first: an Outcome that must be recorded and cannot be is never logged as decided.
         app(AssessmentRecorder::class)->decided($this, $decision, $outcome);
+        app(JudgmentLog::class)->decided($this, $decision, $outcome);
 
         return $outcome;
     }

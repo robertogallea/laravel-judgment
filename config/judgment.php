@@ -89,10 +89,17 @@ return [
     | Records older than "retention_days" are removed by model:prune; null
     | keeps them forever.
     |
+    | With "required" on, an Assessment or Outcome that cannot be recorded is
+    | refused with AssessmentNotRecorded, whatever the failure mode, so no
+    | unrecorded judgment is acted on (ADR-0013). Turn it off to keep working
+    | through a database outage: the failure is reported and logged, and the
+    | audit trail has a gap.
+    |
     */
 
     'persistence' => [
         'enabled' => env('JUDGMENT_PERSIST', true),
+        'required' => env('JUDGMENT_PERSIST_REQUIRED', true),
         'evidence' => env('JUDGMENT_PERSIST_EVIDENCE', true),
         'retention_days' => env('JUDGMENT_RETENTION_DAYS', 365),
     ],

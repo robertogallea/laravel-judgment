@@ -2,6 +2,7 @@
 
 namespace RobertoGallea\Judgment\Support;
 
+use Exception;
 use Illuminate\Contracts\Config\Repository as Config;
 use Illuminate\Contracts\Events\Dispatcher;
 use LogicException;
@@ -14,6 +15,7 @@ use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Contracts\Decision;
 use RobertoGallea\Judgment\Contracts\Outcome;
 use RobertoGallea\Judgment\Events\AssessmentAwaitingReview;
+use RobertoGallea\Judgment\Exceptions\AssessmentNotRecorded;
 use RobertoGallea\Judgment\Exceptions\UnrebuildableAssessment;
 use RobertoGallea\Judgment\Judgment;
 use RobertoGallea\Judgment\Models\AssessmentRecord;
@@ -44,7 +46,7 @@ final class AssessmentRecorder
     /** @var WeakMap<Assessment, Outcome> each of the Judge's Assessments that entered Review, with the Outcome that required it */
     private WeakMap $awaiting;
 
-    public function __construct(private readonly Config $config, private readonly Dispatcher $events)
+    public function __construct(private readonly Config $config, private readonly Dispatcher $events, private readonly JudgmentLog $log)
     {
         $this->records = new WeakMap;
         $this->awaiting = new WeakMap;
@@ -55,7 +57,9 @@ final class AssessmentRecorder
      * @param  array<string, Answer>  $answers
      * @param  array<string, mixed>  $evidence  as the Engine was asked
      * @param  int|null  $cachedFrom  for a cache hit, the id of the record the Engine's Assessment was first stored as
-     * @return AssessmentRecord|null null when judgment.persistence.enabled is off
+     * @return AssessmentRecord|null null when judgment.persistence.enabled is off, or recording failed while it is not required
+     *
+     * @throws AssessmentNotRecorded when recording failed while judgment.persistence.required is on
      */
     public function record(Assessment $assessment, array $questions, array $answers, array $evidence, ?int $cachedFrom = null): ?AssessmentRecord
     {
@@ -85,9 +89,31 @@ final class AssessmentRecorder
         if ($subject?->exists) {
             $record->subject()->associate($subject);
         }
-        $record->save();
+
+        try {
+            $record->save();
+        } catch (Exception $e) {
+            $this->notRecorded(AssessmentNotRecorded::for($assessment, $e));
+            $this->link($assessment, null);
+
+            return null;
+        }
 
         return $this->records[$assessment] = $record;
+    }
+
+    /**
+     * Refuse what could not be recorded when judgment.persistence.required is on (ADR-0013);
+     * otherwise report it and carry on, leaving a gap in the audit trail.
+     */
+    private function notRecorded(AssessmentNotRecorded $exception): void
+    {
+        if ($this->config->get('judgment.persistence.required', true)) {
+            throw $exception;
+        }
+
+        report($exception);
+        $this->log->notRecorded($exception);
     }
 
     /**
@@ -105,6 +131,8 @@ final class AssessmentRecorder
      * Store the Decision last applied to a Judge's Assessment, its version if it declares one,
      * and its Outcome; an Outcome requiring Review puts the record in Review, announced once.
      * From then on the record keeps that Outcome, for the reviewer to resolve.
+     *
+     * @throws AssessmentNotRecorded when the Outcome could not be written while judgment.persistence.required is on
      */
     public function decided(Assessment $assessment, Decision $decision, Outcome $outcome): void
     {
@@ -115,7 +143,13 @@ final class AssessmentRecorder
         $record = $this->records[$assessment] ?: null;
         $entersReview = $outcome->requiresReview() && ! isset($this->awaiting[$assessment]);
         if ($record !== null) {
-            $entersReview = $this->write($record, $decision, $outcome, $entersReview);
+            try {
+                $entersReview = $this->write($record, $decision, $outcome, $entersReview);
+            } catch (Exception $e) {
+                $this->notRecorded(AssessmentNotRecorded::outcome($assessment, $outcome, $e));
+                // Best-effort: Review is still required, but the record does not show it.
+                $record = null;
+            }
         }
         if (! $entersReview) {
             return;

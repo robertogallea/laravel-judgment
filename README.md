@@ -439,6 +439,7 @@ Persistence is configured under `judgment.persistence`:
 | --- | --- | --- | --- |
 | `enabled` | `JUDGMENT_PERSIST` | `true` | record Assessments at all |
 | `evidence` | `JUDGMENT_PERSIST_EVIDENCE` | `true` | `false` stores only the Evidence fingerprint and untrusted paths, e.g. when the Evidence holds personal data |
+| `required` | `JUDGMENT_PERSIST_REQUIRED` | `true` | refuse an Assessment or Outcome that cannot be recorded; see [When recording fails](#when-recording-fails) |
 | `retention_days` | `JUDGMENT_RETENTION_DAYS` | `365` | records older than this are pruned; `null` keeps them forever |
 
 Pruning uses Laravel's `model:prune`. The package's model is not in `app/Models`, so name it when you schedule the command:
@@ -446,6 +447,26 @@ Pruning uses Laravel's `model:prune`. The package's model is not in `app/Models`
 ```php
 Schedule::command('model:prune', ['--model' => [AssessmentRecord::class]])->daily();
 ```
+
+### When recording fails
+
+Recording can fail after the Engine has answered: the migration has not been run, the database is down, a constraint is violated. By default auditing is mandatory, so nothing unrecorded is acted on (ADR-0013):
+
+- `assess()` throws `RobertoGallea\Judgment\Exceptions\AssessmentNotRecorded`, whatever `judgment.failure` says. The Engine did answer, so this is not an Unassessed Judgment. Nothing is cached and `AssessmentCompleted` is not fired.
+- `outcome()` and `decide()` throw it when the Outcome cannot be written. The Outcome is not logged as decided and Review is not announced.
+
+The exception wraps the database error and keeps the Assessment, so the paid answers are not lost:
+
+```php
+try {
+    $outcome = $judgment->assess()->outcome();
+} catch (AssessmentNotRecorded $e) {
+    $e->assessment;     // the answers, not to be acted on
+    $e->getPrevious();  // the QueryException
+}
+```
+
+Set `JUDGMENT_PERSIST_REQUIRED=false` to make auditing best-effort and keep working through a database outage. A recording failure is then passed to `report()` and logged as `Judgment not recorded.`, and `assess()` returns the Assessment as usual. `AssessmentCompleted` and `AssessmentAwaitingReview` still fire, with a null `$record`. The audit trail has a gap for each such failure.
 
 ## Queued assessment
 
@@ -670,7 +691,7 @@ ReviewedReturnDecision · jev-1.13.0 · en · questions 3f2a9c1b
 
 Every assessment fires an event:
 
-- `RobertoGallea\Judgment\Events\AssessmentCompleted`, with `$judgment`, `$assessment` and `$record` (the `AssessmentRecord`, or null when persistence is off or under `Judge::fake()`)
+- `RobertoGallea\Judgment\Events\AssessmentCompleted`, with `$judgment`, `$assessment` and `$record` (the `AssessmentRecord`, or null when persistence is off, best-effort recording failed, or under `Judge::fake()`)
 - `RobertoGallea\Judgment\Events\AssessmentFailed`, with `$judgment` and `$exception`, in both failure modes
 
 The Review lifecycle fires two more: `AssessmentAwaitingReview` and `AssessmentResolved` (see [Review and Resolution](#review-and-resolution)).
@@ -683,6 +704,7 @@ The package also writes log entries you can trace an assessment by:
 | `Judgment unassessed.` | warning | `judgment`, `exception`, plus `engine`, `model`, `request_id` when the Engine responded |
 | `Judgment assessed from cache.` | info | as `Judgment assessed.`, plus `cached_from`: the original record's id |
 | `Judgment decided.` | info | `judgment`, `engine`, `model`, `request_id`, `decision`, `outcome` |
+| `Judgment not recorded.` | warning | `judgment`, `engine`, `model`, `request_id`, `exception`, when [recording is best-effort](#when-recording-fails) and fails |
 
 They go to the default log channel. Set `JUDGMENT_LOG_CHANNEL` to send them elsewhere, or `JUDGMENT_LOG=false` to turn them off. `$assessment->logContext()` returns the same context for your own log entries.
 
