@@ -1,0 +1,3 @@
+# Decision is a separate, pure class written in plain PHP
+
+A Judgment (constructed with its subject, like a Mailable) declares Evidence and Questions and names a default Decision; the Decision is a separate class `(Assessment, Judgment) → Outcome enum`, written as plain PHP (typically `match`), with no I/O and no Engine calls. We rejected a Policy-style single class (couples Questions to one set of thresholds and invites I/O beside `decide()`), attribute-typed schemas (reflection magic, blurs definition and result), Gate-style closures, a fluent band DSL (breaks once two Questions interact) and config/database threshold tables (moves business logic out of version control and tests). Apps wanting editable thresholds read config inside their own Decision.

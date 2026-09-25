@@ -1,0 +1,3 @@
+# Assessments are persisted by default
+
+Every Assessment is recorded (evidence fingerprint, engine and pinned model version, engine request id, answers, Decision applied and its version, Outcome, and any later human resolution), on by default and configurable. Jev returns no server-side record, does not guarantee identical answers for identical requests, and moves model aliases between releases, so audit and replay require our own store; review queues and threshold calibration need it anyway, and GDPR Art. 22 / the AI Act make demonstrable human oversight a real requirement for consequential judgments.

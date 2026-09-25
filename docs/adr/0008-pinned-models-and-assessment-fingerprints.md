@@ -1,0 +1,3 @@
+# Pinned models in production; every Assessment carries its calibration identity
+
+Thresholds are tuned against question wording, model version and Decision logic, so every stored Assessment records a question-set fingerprint, the exact model version, and the Decision class plus optional version; Calibration reports never mix these. Engine model aliases (e.g. `jev-latest`) are refused in production unless explicitly allowed, because a silent model change beneath tuned thresholds is precisely the failure this package exists to prevent. Cached Assessments are stored as new records pointing at the original Provenance, never silent copies.
