@@ -10,9 +10,11 @@ use RobertoGallea\Judgment\Answers\LikelihoodSetAnswer;
 use RobertoGallea\Judgment\Answers\RatingAnswer;
 use RobertoGallea\Judgment\Contracts\Decision;
 use RobertoGallea\Judgment\Contracts\Outcome;
+use RobertoGallea\Judgment\Exceptions\ImpureDecision;
 use RobertoGallea\Judgment\Exceptions\InvalidDecision;
 use RobertoGallea\Judgment\Exceptions\NoDefaultDecision;
 use RobertoGallea\Judgment\Exceptions\UndeclaredQuestion;
+use RobertoGallea\Judgment\Exceptions\UnscriptedQuestion;
 use RobertoGallea\Judgment\Exceptions\WrongQuestionKind;
 use RobertoGallea\Judgment\Questions\Classification;
 use RobertoGallea\Judgment\Questions\Likelihood;
@@ -20,6 +22,7 @@ use RobertoGallea\Judgment\Questions\LikelihoodSet;
 use RobertoGallea\Judgment\Questions\Question;
 use RobertoGallea\Judgment\Questions\Rating;
 use RobertoGallea\Judgment\Support\JudgmentLog;
+use RobertoGallea\Judgment\Testing\FakeAssessment;
 
 /** The recorded answers to a Judgment's Questions: probabilistic, immutable, free of consequence. */
 final class Assessment
@@ -27,13 +30,21 @@ final class Assessment
     /**
      * @param  array<string, Question|LikelihoodSet>  $questions  as declared, so later changes to the Judgment cannot alter what was assessed
      * @param  array<string, Answer>  $answers
+     * @param  bool  $fake  scripted by a test: every Decision is then run twice to check it is pure
      */
     public function __construct(
         public readonly Judgment $judgment,
         private readonly array $questions,
         private readonly array $answers,
         public readonly Provenance $provenance,
+        private readonly bool $fake = false,
     ) {}
+
+    /** Script an Assessment of the Judgment for testing its Decisions, without an Engine. */
+    public static function fake(Judgment $judgment): FakeAssessment
+    {
+        return new FakeAssessment($judgment);
+    }
 
     public function likelihood(string|BackedEnum $key): LikelihoodAnswer
     {
@@ -84,6 +95,10 @@ final class Assessment
 
         $outcome = $decision($this, $this->judgment);
 
+        if ($this->fake && ($again = $decision($this, $this->judgment)) !== $outcome) {
+            throw ImpureDecision::for($decision, $outcome, $again);
+        }
+
         app(JudgmentLog::class)->decided($this, $decision, $outcome);
 
         return $outcome;
@@ -109,6 +124,7 @@ final class Assessment
             throw WrongQuestionKind::for($this->judgment, $key, $question, $kind);
         }
 
-        return $this->answers[$key];
+        // Only a fake Assessment can leave a declared Question unanswered: Judge refuses such a response.
+        return $this->answers[$key] ?? throw UnscriptedQuestion::for($this->judgment, $key);
     }
 }

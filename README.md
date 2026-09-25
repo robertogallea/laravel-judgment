@@ -228,11 +228,73 @@ They go to the default log channel. Set `JUDGMENT_LOG_CHANNEL` to send them else
 
 ## Testing
 
-Bind a fake Engine in your tests to script the answers:
+The package ships two fakes. Both are strict: a test cannot pass by reading an answer nobody scripted.
+
+### Unit-testing a Decision with `Assessment::fake()`
+
+Script the answers of a Judgment's Questions, with no Engine and no database:
 
 ```php
-app()->instance(Engine::class, new MyFakeEngine(['abusive' => .80]));
+use RobertoGallea\Judgment\Assessment;
+
+$assessment = Assessment::fake(new RefundAbuse($refund))
+    ->likelihood('abusive', .80)
+    ->make();
+
+expect($assessment->outcome())->toBe(RefundOutcome::Reject);
 ```
+
+Every Question kind can be scripted:
+
+```php
+Assessment::fake(new SupportTicket($ticket))
+    ->classification('department', Department::Billing, confidence: .9)   // winning label, beating the runner-up by .9
+    ->classification('language', ['english' => .15, 'italian' => .85])   // or a probability per label (unlisted: 0)
+    ->rating('severity', 2, confidence: .9)                               // most probable level, from 0
+    ->rating('severity', [0, .5, .5, 0])                                  // or a probability per level
+    ->make();
+
+Assessment::fake(new PostModeration($post))
+    ->likelihoodSet('harms', ['spam' => .90])                             // a Likelihood per label (unlisted: 0)
+    ->make();
+
+Assessment::fake($judgment)->answers(['abusive' => .80, 'severity' => 2]); // several at once
+```
+
+Each scripted answer is checked against the Judgment's declared Questions: an undeclared key, the wrong kind, an undeclared label or a level outside the scale throws. A Decision that reads a Question the test did not script throws `UnscriptedQuestion`.
+
+A fake Assessment runs each Decision twice and throws `ImpureDecision` if the two Outcomes differ, catching a Decision whose Outcome depends on the clock, the database or its own state rather than its Assessment.
+
+### Feature-testing with `Judge::fake()`
+
+Swap the Judge for a fake that answers each Judgment from a script:
+
+```php
+use RobertoGallea\Judgment\Facades\Judge;
+
+Judge::fake([
+    RefundAbuse::class => ['abusive' => .80],                                         // static answers
+    SupportTicket::class => fn (SupportTicket $judgment) => [                         // a closure given the Judgment
+        'department' => $judgment->ticket->subject === 'Invoice' ? 'billing' : 'other',
+    ],
+    PostModeration::class => Judge::sequence(['harms' => ['spam' => .9]], ['harms' => []]), // one script per assessment
+]);
+```
+
+Answers are written as in `answers()` above. A closure can also return an `Assessment::fake($judgment)` builder, or throw an `EngineFailed` to test failure handling: the fake then fires `AssessmentFailed` and throws or returns `Unassessed` as `judgment.failure` says.
+
+Assessing a Judgment with no script throws `UnscriptedJudgment`, and a sequence that runs out throws `ExhaustedSequence`. While the fake is active the Engine binding throws `RealEngineCallPrevented`, so no test reaches a real Engine. Assessments from the fake fire `AssessmentCompleted` and check every Decision for purity, like `Assessment::fake()`.
+
+Assert what was assessed:
+
+```php
+Judge::assertAssessed(RefundAbuse::class);
+Judge::assertAssessed(RefundAbuse::class, fn (RefundAbuse $judgment) => $judgment->refund->is($refund));
+Judge::assertNotAssessed(ProductReview::class);
+Judge::assertNothingAssessed();
+```
+
+### Package development
 
 ```bash
 composer test      # Pest
