@@ -18,6 +18,9 @@
         "pestphp/pest": "^3.0|^4.0",
         "phpstan/phpstan": "^2.0"
     },
+    "suggest": {
+        "laravel/boost": "Installs this package's AI guidelines and skills for coding agents (^2.0)"
+    },
     "autoload": {
         "psr-4": {
             "RobertoGallea\\Judgment\\": "src/"
