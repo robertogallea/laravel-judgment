@@ -30,6 +30,12 @@ abstract class Judgment
         return null;
     }
 
+    /** The Engine connection to ask, from judgment.engines; null asks the default connection. */
+    public function engine(): ?string
+    {
+        return null;
+    }
+
     public function assess(): Assessment|Unassessed
     {
         return app(Judge::class)->assess($this);

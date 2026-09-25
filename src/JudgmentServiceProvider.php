@@ -8,7 +8,7 @@ use RobertoGallea\Judgment\Console\MakeDecisionCommand;
 use RobertoGallea\Judgment\Console\MakeJudgmentCommand;
 use RobertoGallea\Judgment\Contracts\Engine;
 use RobertoGallea\Judgment\Contracts\Judge as JudgeContract;
-use RobertoGallea\Judgment\Exceptions\EngineNotConfigured;
+use RobertoGallea\Judgment\Engines\JevEngine;
 
 class JudgmentServiceProvider extends ServiceProvider
 {
@@ -16,11 +16,9 @@ class JudgmentServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../config/judgment.php', 'judgment');
 
-        $this->app->bind(Engine::class, function (Application $app): Engine {
-            $engine = $app->make('config')->get('judgment.engine') ?? throw EngineNotConfigured::make();
-
-            return $app->make($engine);
-        });
+        $this->app->singleton(EngineManager::class, fn (Application $app) => (new EngineManager($app))
+            ->extend('jev', JevEngine::connect(...)));
+        $this->app->bind(Engine::class, fn (Application $app): Engine => $app->make(EngineManager::class)->engine());
 
         $this->app->singleton(JudgeContract::class, fn (Application $app) => new Judge($app));
     }
