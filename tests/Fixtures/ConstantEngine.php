@@ -19,11 +19,21 @@ use RobertoGallea\Judgment\Questions\Rating;
  */
 final class ConstantEngine implements Engine
 {
+    /** @var list<EngineRequest> */
+    public array $requests = [];
+
+    public function model(): string
+    {
+        return 'constant-1';
+    }
+
     public function answer(EngineRequest $request): EngineResponse
     {
+        $this->requests[] = $request;
+
         return new EngineResponse(
             array_map($this->even(...), $request->questions),
-            new Provenance(engine: 'constant', model: 'constant-1'),
+            new Provenance(engine: 'constant', model: $this->model()),
         );
     }
 

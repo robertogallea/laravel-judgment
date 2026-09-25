@@ -22,6 +22,7 @@ return new class extends Migration
             $table->string('model');
             $table->string('request_id')->nullable();
             $table->json('provenance_details');
+            $table->unsignedBigInteger('cached_from_id')->nullable()->index();
             $table->string('decision')->nullable();
             $table->string('decision_version')->nullable();
             $table->string('outcome_type')->nullable();

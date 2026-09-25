@@ -16,8 +16,10 @@ use RobertoGallea\Judgment\Exceptions\EngineFailed;
 use RobertoGallea\Judgment\Exceptions\InvalidQuestion;
 use RobertoGallea\Judgment\Exceptions\MalformedEngineResponse;
 use RobertoGallea\Judgment\Jobs\AssessJudgment;
+use RobertoGallea\Judgment\Models\AssessmentRecord;
 use RobertoGallea\Judgment\Questions\LikelihoodSet;
 use RobertoGallea\Judgment\Questions\Question;
+use RobertoGallea\Judgment\Support\AssessmentCache;
 use RobertoGallea\Judgment\Support\AssessmentRecorder;
 use RobertoGallea\Judgment\Support\JudgmentLog;
 
@@ -33,8 +35,17 @@ class Judge implements JudgeContract
         $engine = $judgment->engine() === null
             ? $this->container->make(Engine::class)
             : $this->container->make(EngineManager::class)->engine($judgment->engine());
-        $response = null;
+        $cache = $this->container->make(AssessmentCache::class);
+        if ($cached = $cache->get($judgment, $questions, $request->evidence, $engine)) {
+            [$answers, $provenance, $originalId] = $cached;
+            $assessment = new Assessment($judgment, $questions, $answers, $provenance);
+            $this->complete($assessment, $questions, $answers, $request->evidence, $originalId);
+            $this->container->make(JudgmentLog::class)->assessedFromCache($assessment, $originalId);
 
+            return $assessment;
+        }
+
+        $response = null;
         try {
             $response = $engine->answer($request);
             $this->ensureEveryQuestionIsAnswered($judgment, $request, $response);
@@ -46,12 +57,28 @@ class Judge implements JudgeContract
 
         $answers = $this->regroup($questions, $response->answers);
         $assessment = new Assessment($judgment, $questions, $answers, $response->provenance);
-        $record = $this->container->make(AssessmentRecorder::class)->record($assessment, $questions, $answers, $request->evidence);
-
-        $this->container->make(Dispatcher::class)->dispatch(new AssessmentCompleted($judgment, $assessment, $record));
+        $record = $this->complete($assessment, $questions, $answers, $request->evidence);
         $this->container->make(JudgmentLog::class)->assessed($assessment);
+        $cache->put($assessment, $questions, $answers, $request->evidence, $engine, $record?->id);
 
         return $assessment;
+    }
+
+    /**
+     * Record the Assessment and announce it.
+     *
+     * @param  array<string, Question|LikelihoodSet>  $questions
+     * @param  array<string, Answer>  $answers
+     * @param  array<string, mixed>  $evidence  as the Engine was asked
+     * @param  int|null  $cachedFrom  for a cache hit, the id of the original record
+     */
+    private function complete(Assessment $assessment, array $questions, array $answers, array $evidence, ?int $cachedFrom = null): ?AssessmentRecord
+    {
+        $record = $this->container->make(AssessmentRecorder::class)->record($assessment, $questions, $answers, $evidence, $cachedFrom);
+
+        $this->container->make(Dispatcher::class)->dispatch(new AssessmentCompleted($assessment->judgment, $assessment, $record));
+
+        return $record;
     }
 
     public function dispatch(Judgment $judgment): PendingDispatch

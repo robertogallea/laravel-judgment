@@ -31,6 +31,12 @@ final class JudgmentLog
         $this->channel()?->info('Judgment assessed.', $assessment->logContext());
     }
 
+    /** @param  int|null  $originalId  the id of the record first stored for the Engine's Assessment */
+    public function assessedFromCache(Assessment $assessment, ?int $originalId): void
+    {
+        $this->channel()?->info('Judgment assessed from cache.', [...$assessment->logContext(), 'cached_from' => $originalId]);
+    }
+
     /** @param  Provenance|null  $provenance  known when the Engine responded but the response was unusable */
     public function unassessed(Judgment $judgment, EngineFailed $exception, ?Provenance $provenance): void
     {

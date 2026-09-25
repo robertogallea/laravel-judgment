@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Contracts\Decision;
@@ -36,6 +37,7 @@ use RobertoGallea\Judgment\Support\AssessmentRecorder;
  * @property string $model
  * @property ?string $request_id
  * @property array<string, mixed> $provenance_details
+ * @property ?int $cached_from_id
  * @property ?class-string<Decision> $decision
  * @property ?string $decision_version
  * @property ?class-string<Outcome> $outcome_type
@@ -45,6 +47,7 @@ use RobertoGallea\Judgment\Support\AssessmentRecorder;
  * @property ?CarbonImmutable $resolved_at
  * @property-read ?Model $subject
  * @property-read ?Model $resolver
+ * @property-read ?AssessmentRecord $cachedFrom
  */
 class AssessmentRecord extends Model
 {
@@ -147,6 +150,17 @@ class AssessmentRecord extends Model
         return is_numeric($days)
             ? static::query()->where('created_at', '<', now()->subDays((int) $days))
             : static::query()->whereKey([]);
+    }
+
+    /**
+     * For a cache hit, the record the Engine's Assessment was first stored as: its Provenance
+     * is this record's too, without its details. Null for an Assessment the Engine produced, or once the original is pruned.
+     *
+     * @return BelongsTo<AssessmentRecord, $this>
+     */
+    public function cachedFrom(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'cached_from_id');
     }
 
     /** @return MorphTo<Model, $this> the reviewer who recorded the Resolution */

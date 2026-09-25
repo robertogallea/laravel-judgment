@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Sleep;
 use RobertoGallea\Judgment\Assessment;
+use RobertoGallea\Judgment\EngineManager;
 use RobertoGallea\Judgment\Evidence;
 use RobertoGallea\Judgment\Exceptions\EngineFailed;
 use RobertoGallea\Judgment\Exceptions\EngineNotConfigured;
@@ -322,6 +323,12 @@ it('warns about a model alias outside production', function () {
 
     expect(Http::recorded())->toHaveCount(2);
     Log::shouldHaveReceived('warning')->once()->with('Judgment Engine model is an alias, not an exact version.', ['connection' => 'jev', 'model' => 'jev-latest']);
+});
+
+it('reports the model the connection pins', function () {
+    config(['judgment.engines.jev.model' => 'jev-1.14.2']);
+
+    expect(app(EngineManager::class)->engine('jev')->model())->toBe('jev-1.14.2');
 });
 
 it('does not warn about a pinned model', function () {

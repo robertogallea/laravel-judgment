@@ -22,8 +22,18 @@ final class FakeEngine implements Engine
      * @param  array<string, float|non-empty-array<string, float>|non-empty-list<float>>  $answers  a probability per Likelihood,
      *                                                                                              a label => probability map per Classification,
      *                                                                                              a probability per level per Rating
+     * @param  array<string, mixed>  $details  the Provenance details to report
      */
-    public function __construct(private readonly array $answers) {}
+    public function __construct(
+        private readonly array $answers,
+        private readonly string $model = 'fake-1.0.0',
+        private readonly array $details = [],
+    ) {}
+
+    public function model(): string
+    {
+        return $this->model;
+    }
 
     public function answer(EngineRequest $request): EngineResponse
     {
@@ -36,7 +46,7 @@ final class FakeEngine implements Engine
 
         return new EngineResponse(
             $answers,
-            new Provenance(engine: 'fake', model: 'fake-1.0.0', requestId: 'req-'.count($this->requests)),
+            new Provenance(engine: 'fake', model: $this->model, requestId: 'req-'.count($this->requests), details: $this->details),
         );
     }
 
