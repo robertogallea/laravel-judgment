@@ -198,14 +198,24 @@ it('records the request id, model, usage and Jev\'s own confidence as Provenance
 
 it('maps Jev errors to distinct package exceptions', function (int $status, string $exception, string $message) {
     config(['judgment.engines.jev.retries' => 0]);
-    Http::fake(['jev.test/*' => Http::response(['error' => ['message' => 'Jev says no']], $status, ['x-typesafe-request-id' => 'req_err'])]);
+    Http::fake(['jev.test/*' => Http::response(['detail' => ['error_type' => 'some_error', 'message' => 'Jev says no']], $status, ['x-typesafe-request-id' => 'req_err'])]);
 
     expect(fn () => refundAbuse()->assess())->toThrow($exception, $message);
 })->with([
+    'invalid request' => [400, EngineRejectedRequest::class, 'The Engine rejected the request as invalid (HTTP 400, request req_err): Jev says no'],
     'validation' => [422, EngineRejectedRequest::class, 'The Engine rejected the request as invalid (HTTP 422, request req_err): Jev says no'],
     'authentication' => [401, EngineUnauthorized::class, 'The Engine refused the credentials (HTTP 401, request req_err): Jev says no'],
     'rate limit' => [429, EngineRateLimited::class, 'The Engine rate-limited the request (HTTP 429, request req_err): Jev says no'],
     'overload' => [529, EngineOverloaded::class, 'The Engine is overloaded (HTTP 529, request req_err): Jev says no'],
+]);
+
+it('reads the reason from the error body Jev actually sends', function (int $status, string $exception, string $message) {
+    Http::fake(['jev.test/*' => Http::response(['detail' => ['error_type' => 'authentication_error', 'message' => $message]], $status, ['x-typesafe-request-id' => 'req_01a0d7c5'])]);
+
+    expect(fn () => refundAbuse()->assess())->toThrow($exception, "(HTTP $status, request req_01a0d7c5): $message");
+})->with([
+    'a wrong key' => [401, EngineUnauthorized::class, 'Cannot authenticate with the server. Please check your API key and try again.'],
+    'no key' => [403, EngineUnauthorized::class, 'Must supply an API key! Check your request and try again.'],
 ]);
 
 it('reports any other Jev error as an Engine failure', function () {
@@ -266,9 +276,9 @@ it('gives up after the configured number of retries', function () {
 
 it('does not retry a request Jev rejected', function () {
     Sleep::fake();
-    Http::fake(['jev.test/*' => Http::response(null, 422)]);
+    Http::fake(['jev.test/*' => Http::response(['detail' => ['error_type' => 'api_usage_error', 'message' => 'Unknown model: jev-0.0.1']], 400)]);
 
-    expect(fn () => refundAbuse()->assess())->toThrow(EngineRejectedRequest::class);
+    expect(fn () => refundAbuse()->assess())->toThrow(EngineRejectedRequest::class, 'Unknown model: jev-0.0.1');
     Http::assertSentCount(1);
     Sleep::assertNeverSlept();
 });

@@ -166,8 +166,8 @@ final class JevEngine implements Engine
     private function ensureSuccessful(Response $response): void
     {
         $failure = match ($response->status()) {
-            401 => EngineUnauthorized::respond(...),
-            422 => EngineRejectedRequest::respond(...),
+            401, 403 => EngineUnauthorized::respond(...),
+            400, 422 => EngineRejectedRequest::respond(...),
             429 => EngineRateLimited::respond(...),
             529 => EngineOverloaded::respond(...),
             default => null,
@@ -180,10 +180,10 @@ final class JevEngine implements Engine
         $response->throw();
     }
 
-    /** Jev's own explanation of an error, however its body carries one. */
+    /** Jev's own explanation of an error, from its {"detail": {"error_type": …, "message": …}} body. */
     private function reason(Response $response): string
     {
-        $reason = $response->json('error.message') ?? $response->json('message') ?? $response->json('error');
+        $reason = $response->json('detail.message');
 
         return is_string($reason) ? $reason : $response->body();
     }

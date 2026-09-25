@@ -201,8 +201,8 @@ The Jev driver reports each kind of error with its own exception. All of them ex
 
 | Jev status | Exception |
 |---|---|
-| 422 | `EngineRejectedRequest`: the request is invalid, so retrying will not help |
-| 401 | `EngineUnauthorized`: check the API key |
+| 400, 422 | `EngineRejectedRequest`: the request is invalid (such as an unknown model), so retrying will not help |
+| 401, 403 | `EngineUnauthorized`: the API key is wrong or missing |
 | 429 | `EngineRateLimited`, once the retries are used up |
 | 529 | `EngineOverloaded`, once the retries are used up |
 
