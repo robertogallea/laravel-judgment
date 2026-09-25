@@ -26,11 +26,19 @@ _Avoid_: Score (as a domain term), grade
 The application entity a Judgment is constructed with and about which its Questions are asked.
 _Avoid_: Target, model, resource
 
+**Likelihood Set**:
+A group of independent Likelihoods over a closed set of labels, each with its own complete question, used for multi-label questions.
+_Avoid_: Multi-label question, flags, tags
+
 **Evidence**:
 The subject-specific material that Questions are asked over.
 _Avoid_: State, context, input, payload
 
 ### Answering
+
+**Untrusted text**:
+Parts of the Evidence authored by the end user, marked so the Engine and reviewers treat them as claims rather than instructions.
+_Avoid_: User input, raw text
 
 **Assessment**:
 The recorded answers to a set of Questions for one piece of Evidence; probabilistic and free of consequence.
@@ -59,7 +67,7 @@ The deterministic, application-owned mapping from an Assessment to an Outcome.
 _Avoid_: Policy, threshold config, verdict
 
 **Outcome**:
-A named member of a closed, application-defined set produced by a Decision.
+A named member of a closed, enumerable, application-defined set produced by a Decision; the same set a reviewer chooses a Resolution from.
 _Avoid_: Result, status, action
 
 **Review**:

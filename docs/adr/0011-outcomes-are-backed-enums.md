@@ -1,0 +1,3 @@
+# Outcomes are backed enums
+
+An Outcome must be a backed enum implementing the package's Outcome contract; the package enforces this at the type level. The API-feel prototype tried a value-object Outcome (queue + priority): it works inside a Decision, but persistence needs a stable serialised value, Resolution needs a closed list a reviewer can choose from, and Calibration needs to group by Outcome — all of which a free-form object breaks. When an Outcome seems multi-dimensional, split it into separate Decisions, or recognise that the extra dimension (e.g. priority) is not an Outcome and derive it in application code.
