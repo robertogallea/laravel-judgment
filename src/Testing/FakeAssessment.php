@@ -7,6 +7,7 @@ use LogicException;
 use RobertoGallea\Judgment\Answers\Answer;
 use RobertoGallea\Judgment\Answers\LikelihoodAnswer;
 use RobertoGallea\Judgment\Assessment;
+use RobertoGallea\Judgment\Exceptions\InvalidProbability;
 use RobertoGallea\Judgment\Exceptions\UndeclaredLabel;
 use RobertoGallea\Judgment\Exceptions\UndeclaredLevel;
 use RobertoGallea\Judgment\Exceptions\UndeclaredQuestion;
@@ -60,7 +61,7 @@ final class FakeAssessment
     public function likelihood(string|BackedEnum $key, float $probability): self
     {
         $this->declared($key, Likelihood::class);
-        $this->answers[$this->key($key)] = new LikelihoodAnswer($probability);
+        $this->answers[$this->key($key)] = new LikelihoodAnswer($this->probability($probability, sprintf('probability of "%s"', $this->key($key))));
 
         return $this;
     }
@@ -76,14 +77,15 @@ final class FakeAssessment
         $question = $this->declared($key, Classification::class);
         $labels = array_map(strval(...), array_keys($question->criteria()));
 
-        $probabilities = is_array($label) ? $label : self::winning($labels, $this->key($label), $confidence);
-        foreach (array_keys($probabilities) as $scripted) {
+        $probabilities = is_array($label) ? $label : self::winning($labels, $this->key($label), $this->confidence($key, $confidence));
+        foreach ($probabilities as $scripted => $probability) {
             if (! in_array((string) $scripted, $labels, true)) {
                 throw UndeclaredLabel::for((string) $scripted, $labels);
             }
+            $this->probability($probability, sprintf('probability of "%s.%s"', $this->key($key), $scripted));
         }
 
-        $this->answers[$this->key($key)] = $question->answer([...array_fill_keys($labels, 0.0), ...$probabilities]);
+        $this->answers[$this->key($key)] = $question->answer(array_replace(array_fill_keys($labels, 0.0), $probabilities));
 
         return $this;
     }
@@ -103,7 +105,10 @@ final class FakeAssessment
             throw UndeclaredLevel::for($this->judgment, $this->key($key), $levels);
         }
 
-        $probabilities = is_array($level) ? $level : array_values(self::winning(range(0, $levels - 1), $level, $confidence));
+        $probabilities = is_array($level) ? $level : array_values(self::winning(range(0, $levels - 1), $level, $this->confidence($key, $confidence)));
+        foreach ($probabilities as $scripted => $probability) {
+            $this->probability($probability, sprintf('probability of level %d of "%s"', $scripted, $this->key($key)));
+        }
         $this->answers[$this->key($key)] = $question->answer($probabilities);
 
         return $this;
@@ -124,7 +129,7 @@ final class FakeAssessment
             if (! isset($likelihoods[$label])) {
                 throw UndeclaredLabel::for((string) $label, $labels, 'Likelihood Set');
             }
-            $likelihoods[$label] = new LikelihoodAnswer($probability);
+            $likelihoods[$label] = new LikelihoodAnswer($this->probability($probability, sprintf('probability of "%s.%s"', $this->key($key), $label)));
         }
 
         $this->answers[$this->key($key)] = $question->answer($likelihoods);
@@ -155,6 +160,17 @@ final class FakeAssessment
         }
 
         return $question;
+    }
+
+    private function confidence(string|BackedEnum $key, float $confidence): float
+    {
+        return $this->probability($confidence, sprintf('Confidence of "%s"', $this->key($key)));
+    }
+
+    /** @param  string  $what  what the probability is of, for the message */
+    private function probability(float $probability, string $what): float
+    {
+        return $probability >= 0 && $probability <= 1 ? $probability : throw InvalidProbability::for($what, $probability);
     }
 
     /**

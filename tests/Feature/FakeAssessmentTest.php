@@ -7,6 +7,8 @@ use RobertoGallea\Judgment\Exceptions\UndeclaredLevel;
 use RobertoGallea\Judgment\Exceptions\UndeclaredQuestion;
 use RobertoGallea\Judgment\Exceptions\UnscriptedQuestion;
 use RobertoGallea\Judgment\Exceptions\WrongQuestionKind;
+use RobertoGallea\Judgment\Judgment;
+use RobertoGallea\Judgment\Questions\Classification;
 use RobertoGallea\Judgment\Tests\Fixtures\Department;
 use RobertoGallea\Judgment\Tests\Fixtures\Flag;
 use RobertoGallea\Judgment\Tests\Fixtures\ImpureRefundDecision;
@@ -112,3 +114,38 @@ it('fails clearly when a Decision reads a Question the fake did not script', fun
 it('runs each Decision twice and fails when the Outcomes differ', function () {
     Assessment::fake(refundAbuse())->likelihood('abusive', .5)->make()->decide(new ImpureRefundDecision);
 })->throws(ImpureDecision::class, ImpureRefundDecision::class.' returned Approve, then Reject, for the same Assessment. A Decision must depend only on its Assessment and Judgment.');
+
+it('scripts a Classification whose labels look like integers', function () {
+    $judgment = new class extends Judgment
+    {
+        public function evidence(): array
+        {
+            return [];
+        }
+
+        public function questions(): array
+        {
+            return ['stars' => Classification::of('How many stars would the reviewer give?', labels: ['1', '2', '3'])];
+        }
+    };
+
+    $winning = Assessment::fake($judgment)->classification('stars', '2')->make()->classification('stars');
+    $mapped = Assessment::fake($judgment)->classification('stars', ['3' => .9])->make()->classification('stars');
+
+    expect($winning->label())->toBe('2')
+        ->and($mapped->label())->toBe('3')
+        ->and($mapped->probabilityOf('1'))->toBe(0.0);
+});
+
+it('refuses to script a probability or Confidence outside 0 to 1', function (Closure $script) {
+    $script(Assessment::fake(supportTicket()));
+})->with([
+    'Classification probability' => [fn ($fake) => $fake->classification('language', ['english' => 1.2])],
+    'Classification Confidence' => [fn ($fake) => $fake->classification('language', 'english', confidence: 1.5)],
+    'Rating probability' => [fn ($fake) => $fake->rating('severity', [-.1, .5, .5, .1])],
+    'Rating Confidence' => [fn ($fake) => $fake->rating('severity', 1, confidence: -.2)],
+])->throws(InvalidArgumentException::class, 'must be between 0 and 1');
+
+it('refuses to script a Likelihood outside 0 to 1', function () {
+    Assessment::fake(refundAbuse())->likelihood('abusive', 1.7);
+})->throws(InvalidArgumentException::class, 'The probability of "abusive" must be between 0 and 1, 1.7 given.');

@@ -261,7 +261,7 @@ Assessment::fake(new PostModeration($post))
 Assessment::fake($judgment)->answers(['abusive' => .80, 'severity' => 2]); // several at once
 ```
 
-Each scripted answer is checked against the Judgment's declared Questions: an undeclared key, the wrong kind, an undeclared label or a level outside the scale throws. A Decision that reads a Question the test did not script throws `UnscriptedQuestion`.
+Each scripted answer is checked against the Judgment's declared Questions: an undeclared key, the wrong kind, an undeclared label, a level outside the scale, or a probability or Confidence outside 0 to 1 throws. A Decision that reads a Question the test did not script throws `UnscriptedQuestion`.
 
 A fake Assessment runs each Decision twice and throws `ImpureDecision` if the two Outcomes differ, catching a Decision whose Outcome depends on the clock, the database or its own state rather than its Assessment.
 
