@@ -58,7 +58,7 @@ final class Assessment
         return $answer;
     }
 
-    public function likelihoods(string|BackedEnum $key): LikelihoodSetAnswer
+    public function likelihoodSet(string|BackedEnum $key): LikelihoodSetAnswer
     {
         $answer = $this->answer($key, LikelihoodSet::class);
         assert($answer instanceof LikelihoodSetAnswer);

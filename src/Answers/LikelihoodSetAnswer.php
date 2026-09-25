@@ -36,7 +36,7 @@ final class LikelihoodSetAnswer implements Answer
      *
      * @return list<string|BackedEnum> enum cases when the labels come from a backed enum
      */
-    public function above(float $threshold): array
+    public function labelsAbove(float $threshold): array
     {
         $hits = array_filter($this->likelihoods, fn (LikelihoodAnswer $answer) => $answer->above($threshold));
         uasort($hits, fn (LikelihoodAnswer $a, LikelihoodAnswer $b) => $b->probability() <=> $a->probability());

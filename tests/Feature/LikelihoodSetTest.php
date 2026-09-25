@@ -57,7 +57,7 @@ it('asks the Engine each enum case\'s own complete question', function () {
 });
 
 it('reads the Likelihood of each label of the set as one answer', function () {
-    $flags = assessPost()->likelihoods('flags');
+    $flags = assessPost()->likelihoodSet('flags');
 
     expect($flags->of('spam')->probability())->toBe(.85)
         ->and($flags->of(Flag::Hate)->probability())->toBe(.10)
@@ -71,30 +71,30 @@ it('names the Likelihood Set when it is read as a single Likelihood', function (
 it('names the actual kind when a Classification is read as a Likelihood Set', function () {
     app()->instance(Engine::class, new FakeEngine(['counterfeit' => .10, 'tone' => ['neutral' => .70, 'hyped' => .30]]));
 
-    (new ProductListing('Genuine leather wallet'))->assess()->likelihoods('tone');
+    (new ProductListing('Genuine leather wallet'))->assess()->likelihoodSet('tone');
 })->throws(WrongQuestionKind::class, 'Question "tone" on '.ProductListing::class.' is a Classification, not a Likelihood Set.');
 
 it('reads the highest Likelihood in the set', function () {
-    $flags = assessPost()->likelihoods('flags');
+    $flags = assessPost()->likelihoodSet('flags');
 
     expect($flags->max()->probability())->toBe(.85)
         ->and($flags->max()->above(.80))->toBeTrue();
 });
 
 it('lists the labels at or above a threshold, highest first, as enum cases when enum-backed', function () {
-    $flags = assessPost()->likelihoods('flags');
+    $flags = assessPost()->likelihoodSet('flags');
 
-    expect($flags->above(.40))->toBe([Flag::Spam, Flag::SelfHarm])
-        ->and($flags->above(.10))->toBe([Flag::Spam, Flag::SelfHarm, Flag::Hate])
-        ->and($flags->above(.90))->toBe([]);
+    expect($flags->labelsAbove(.40))->toBe([Flag::Spam, Flag::SelfHarm])
+        ->and($flags->labelsAbove(.10))->toBe([Flag::Spam, Flag::SelfHarm, Flag::Hate])
+        ->and($flags->labelsAbove(.90))->toBe([]);
 });
 
 it('lists the labels above a threshold as strings when declared from an array', function () {
-    expect(assessPost(['topics.sport' => .70])->likelihoods('topics')->above(.50))->toBe(['sport', 'politics']);
+    expect(assessPost(['topics.sport' => .70])->likelihoodSet('topics')->labelsAbove(.50))->toBe(['sport', 'politics']);
 });
 
 it('names the declared labels when asked about an undeclared one', function () {
-    assessPost()->likelihoods('flags')->of('violence');
+    assessPost()->likelihoodSet('flags')->of('violence');
 })->throws(UndeclaredLabel::class, 'The Likelihood Set declares no label "violence". Declared: hate, spam, self_harm.');
 
 it('rejects an Engine response that leaves a label of the set unanswered, naming its dotted key', function () {
