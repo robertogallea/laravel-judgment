@@ -168,6 +168,19 @@ $outcome = $assessment->outcome();                        // the Judgment's defa
 $outcome = $assessment->decide(new StrictRefundDecision()); // another Decision over the same answers
 ```
 
+## Generating Judgments and Decisions
+
+```bash
+php artisan make:judgment RefundAbuse --subject=Refund
+php artisan make:decision RefundDecision --judgment=RefundAbuse --outcome=RefundOutcome
+```
+
+`make:judgment` writes `app/Judgments/RefundAbuse.php`, constructed with the Subject, with empty `evidence()`, `questions()` and `decision()` to fill in. A bare `--subject` is placed under `App\Models` (or `App` when there is no `app/Models` directory); without it the Subject is typed `mixed`.
+
+`make:decision` writes `app/Decisions/RefundDecision.php`, type-hinting the Judgment (`App\Judgments\…`) and returning the Outcome enum (`App\Enums\…`). Pass a fully qualified class to use another namespace; a class whose name clashes with an import is written fully qualified. Without the options it falls back to the `Judgment` and `Outcome` contracts.
+
+A generated Decision contains no thresholds, only a commented placeholder arm, and throws a `LogicException` until you replace it. An Engine's probabilities differ per Question, so there are no sensible default numbers: calibrate each threshold against labelled examples with `php artisan judgment:eval`.
+
 ## When the Engine fails
 
 A failed Engine call is never turned into a default Outcome. By default `assess()` throws `RobertoGallea\Judgment\Exceptions\EngineFailed`, wrapping the exception the Engine threw. Errors such as a `TypeError` are bugs, not Engine failures, and pass through unwrapped. A response that leaves a Question unanswered, or answers one that was not asked, throws `MalformedEngineResponse`, which extends `EngineFailed`.
