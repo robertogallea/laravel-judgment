@@ -44,17 +44,18 @@ abstract class Judgment
 
     /**
      * The Subject its Assessments are recorded against: by default the only
-     * Eloquent model among the public properties, null if there is none or several.
+     * Eloquent model among the public instance properties, null if there is none or several.
      */
     public function subject(): ?Model
     {
-        $models = array_filter(
-            array_map(fn (ReflectionProperty $property) => $property->isInitialized($this) ? $property->getValue($this) : null,
-                (new ReflectionObject($this))->getProperties(ReflectionProperty::IS_PUBLIC)),
-            fn (mixed $value) => $value instanceof Model,
-        );
+        $models = [];
+        foreach ((new ReflectionObject($this))->getProperties(ReflectionProperty::IS_PUBLIC) as $property) {
+            if (! $property->isStatic() && $property->isInitialized($this) && $property->getValue($this) instanceof Model) {
+                $models[] = $property->getValue($this);
+            }
+        }
 
-        return count($models) === 1 ? reset($models) : null;
+        return count($models) === 1 ? $models[0] : null;
     }
 
     /** The Engine connection to ask, from judgment.engines; null asks the default connection. */

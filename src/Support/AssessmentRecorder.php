@@ -51,10 +51,12 @@ final class AssessmentRecorder
             return null;
         }
 
+        $json = json_encode($evidence, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
+
         $record = new AssessmentRecord([
             'judgment' => $assessment->judgment::class,
-            'evidence_fingerprint' => hash('sha256', (string) json_encode($evidence)),
-            'evidence' => $this->config->get('judgment.persistence.evidence') ? json_decode((string) json_encode($evidence), true) : null,
+            'evidence_fingerprint' => hash('sha256', $json),
+            'evidence' => $this->config->get('judgment.persistence.evidence') ? json_decode($json, true, flags: JSON_THROW_ON_ERROR) : null,
             'untrusted_paths' => $this->untrustedPaths($evidence),
             'language' => $assessment->judgment->language(),
             'questions_fingerprint' => self::fingerprint($questions),
@@ -65,8 +67,9 @@ final class AssessmentRecorder
             'provenance_details' => $assessment->provenance->details,
         ]);
 
+        // An unsaved Subject has no key to link it by.
         $subject = $assessment->judgment->subject();
-        if ($subject !== null) {
+        if ($subject?->exists) {
             $record->subject()->associate($subject);
         }
         $record->save();
@@ -130,7 +133,7 @@ final class AssessmentRecorder
         }, $questions);
         ksort($described);
 
-        return hash('sha256', (string) json_encode($described));
+        return hash('sha256', json_encode($described, JSON_THROW_ON_ERROR));
     }
 
     /** @return array{string, string, mixed} */
@@ -172,10 +175,25 @@ final class AssessmentRecorder
     {
         return match (true) {
             $question instanceof Likelihood => new LikelihoodAnswer((float) $answer),
-            $question instanceof Classification, $question instanceof Rating => $question->answer($answer),
+            $question instanceof Classification => $question->answer($this->probabilities($answer)),
+            $question instanceof Rating => $question->answer(array_values($this->probabilities($answer))),
             $question instanceof LikelihoodSet => $this->likelihoodSet($question, $answer),
             default => throw new LogicException(sprintf('A Question of kind %s cannot be rebuilt.', $question::class)),
         };
+    }
+
+    /**
+     * The recorded probabilities as floats: JSON stores a whole probability such as 1.0 as 1.
+     *
+     * @return non-empty-array<array-key, float>
+     */
+    private function probabilities(mixed $recorded): array
+    {
+        if (! is_array($recorded) || $recorded === []) {
+            throw new LogicException('A recorded Classification or Rating answer holds no probabilities.');
+        }
+
+        return array_map(floatval(...), $recorded);
     }
 
     /** @param  array<string, float>  $probabilities  label => probability, as recorded */

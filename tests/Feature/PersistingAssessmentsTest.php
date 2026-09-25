@@ -10,11 +10,13 @@ use RobertoGallea\Judgment\Questions\Question;
 use RobertoGallea\Judgment\Questions\Rating;
 use RobertoGallea\Judgment\Tests\Fixtures\ConstantEngine;
 use RobertoGallea\Judgment\Tests\Fixtures\FakeEngine;
+use RobertoGallea\Judgment\Tests\Fixtures\ListingTone;
 use RobertoGallea\Judgment\Tests\Fixtures\RefundOutcome;
 use RobertoGallea\Judgment\Tests\Fixtures\ReturnAbuse;
 use RobertoGallea\Judgment\Tests\Fixtures\ReturnDecision;
 use RobertoGallea\Judgment\Tests\Fixtures\ReturnRequest;
 use RobertoGallea\Judgment\Tests\Fixtures\StrictReturnDecision;
+use RobertoGallea\Judgment\Tests\Fixtures\TemplatedReturn;
 
 it('records every Assessment with its Judgment, answers and Provenance', function () {
     returnAbuse()->assess();
@@ -147,4 +149,30 @@ it('records the Decision applied, its version and its Outcome', function () {
 
     expect(AssessmentRecord::sole()->only('decision', 'decision_version', 'outcome'))
         ->toBe(['decision' => StrictReturnDecision::class, 'decision_version' => null, 'outcome' => 'reject']);
+});
+
+it('refuses to record Evidence that cannot be encoded as JSON', function () {
+    app()->instance(Engine::class, new ConstantEngine);
+
+    expect(fn () => (new ListingTone("Invalid UTF-8: \xB1"))->assess())->toThrow(JsonException::class)
+        ->and(AssessmentRecord::count())->toBe(0);
+});
+
+it('records no Subject for a model that is not stored', function () {
+    app()->instance(Engine::class, new ConstantEngine);
+
+    (new ReturnAbuse(new ReturnRequest(['item' => 'Jacket', 'reason' => 'Unsaved.'])))->assess();
+
+    expect(AssessmentRecord::sole()->only('subject_type', 'subject_id'))->toBe(['subject_type' => null, 'subject_id' => null]);
+});
+
+it('never takes a static property for the Subject', function () {
+    app()->instance(Engine::class, new ConstantEngine);
+    TemplatedReturn::$template = ReturnRequest::create(['item' => 'Any', 'reason' => 'Template.']);
+    $request = ReturnRequest::create(['item' => 'Jacket', 'reason' => 'Torn.']);
+
+    (new TemplatedReturn($request))->assess();
+    TemplatedReturn::$template = null;
+
+    expect(AssessmentRecord::sole()->subject?->is($request))->toBeTrue();
 });

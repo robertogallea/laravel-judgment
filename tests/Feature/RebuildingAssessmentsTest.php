@@ -79,3 +79,12 @@ it('refuses to rebuild without a Subject to construct the Judgment with', functi
     expect(fn () => AssessmentRecord::sole()->assessment())
         ->toThrow(UnrebuildableAssessment::class, 'no Subject to construct '.SupportTicket::class.' with: pass the Judgment');
 });
+
+it('rebuilds whole probabilities as floats', function () {
+    assessTicket(['department' => ['billing' => 1.0, 'technical' => 0.0, 'other' => 0.0], 'severity' => [0.0, 0.0, 1.0, 0.0]]);
+
+    $rebuilt = AssessmentRecord::sole()->assessment(new SupportTicket(new Ticket('Doppio addebito', 'Mi avete addebitato due volte.')));
+
+    expect($rebuilt->classification('department')->probabilities())->toBe(['billing' => 1.0, 'technical' => 0.0, 'other' => 0.0])
+        ->and($rebuilt->rating('severity')->probabilities())->toBe([0.0, 0.0, 1.0, 0.0]);
+});

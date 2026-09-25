@@ -290,7 +290,7 @@ Every Assessment is recorded as an `RobertoGallea\Judgment\Models\AssessmentReco
 | `engine`, `model`, `request_id`, `provenance_details` | the Provenance |
 | `decision`, `decision_version`, `outcome` | the Decision last applied and its Outcome |
 
-The Subject is the only Eloquent model among the Judgment's public properties. If the Judgment has none, or more than one, no Subject is recorded. Override `subject()` to choose it. The language is not detected or translated. A Judgment declares it by overriding `language()`:
+The Subject is the only Eloquent model among the Judgment's public instance properties. If the Judgment has none, or more than one, or the model is not saved yet, no Subject is recorded. Override `subject()` to choose it. The language is not detected or translated. A Judgment declares it by overriding `language()`:
 
 ```php
 public function language(): ?string
