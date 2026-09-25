@@ -24,9 +24,15 @@ return new class extends Migration
             $table->json('provenance_details');
             $table->string('decision')->nullable();
             $table->string('decision_version')->nullable();
+            $table->string('outcome_type')->nullable();
             $table->string('outcome')->nullable();
+            $table->timestamp('review_requested_at')->nullable();
+            $table->string('resolution')->nullable();
+            $table->nullableMorphs('resolver');
+            $table->timestamp('resolved_at')->nullable();
             $table->timestamps();
             $table->index('created_at');
+            $table->index(['review_requested_at', 'resolved_at']);
         });
     }
 
