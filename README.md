@@ -438,8 +438,8 @@ Persistence is configured under `judgment.persistence`:
 | Key | Env | Default | |
 | --- | --- | --- | --- |
 | `enabled` | `JUDGMENT_PERSIST` | `true` | record Assessments at all |
-| `evidence` | `JUDGMENT_PERSIST_EVIDENCE` | `true` | `false` stores only the Evidence fingerprint and untrusted paths, e.g. when the Evidence holds personal data |
 | `required` | `JUDGMENT_PERSIST_REQUIRED` | `true` | refuse an Assessment or Outcome that cannot be recorded; see [When recording fails](#when-recording-fails) |
+| `evidence` | `JUDGMENT_PERSIST_EVIDENCE` | `true` | `false` stores only the Evidence fingerprint and untrusted paths, e.g. when the Evidence holds personal data |
 | `retention_days` | `JUDGMENT_RETENTION_DAYS` | `365` | records older than this are pruned; `null` keeps them forever |
 
 Pruning uses Laravel's `model:prune`. The package's model is not in `app/Models`, so name it when you schedule the command:
@@ -466,6 +466,8 @@ try {
 }
 ```
 
+Deciding `$e->assessment` throws `AssessmentNotRecorded` too, so its Outcome is never acted on either.
+
 Set `JUDGMENT_PERSIST_REQUIRED=false` to make auditing best-effort and keep working through a database outage. A recording failure is then passed to `report()` and logged as `Judgment not recorded.`, and `assess()` returns the Assessment as usual. `AssessmentCompleted` and `AssessmentAwaitingReview` still fire, with a null `$record`. The audit trail has a gap for each such failure.
 
 ## Queued assessment
@@ -483,7 +485,7 @@ Judge::dispatch(new RefundAbuse($refund));
 (new RefundAbuse($refund))->dispatch()->onQueue('judgments')->delay(now()->addMinute());
 ```
 
-Both return Laravel's `PendingDispatch`, so you can chain `onConnection()`, `onQueue()` and `delay()`. The queued job assesses the Judgment and fires the same `AssessmentCompleted` and `AssessmentFailed` events as `assess()`. With `judgment.throw_on_failure` on (the default) a failed assessment fails the job. With it off the job completes.
+Both return Laravel's `PendingDispatch`, so you can chain `onConnection()`, `onQueue()` and `delay()`. The queued job assesses the Judgment and fires the same `AssessmentCompleted` and `AssessmentFailed` events as `assess()`. With `judgment.throw_on_failure` on (the default) a failed assessment fails the job. With it off the job completes. An Assessment that cannot be recorded fails the job while [recording is required](#when-recording-fails), whatever `judgment.throw_on_failure` says. Its answers are lost with the job, and each retry is another paid Engine round.
 
 A Judgment is queued like a Mailable. The Eloquent models and Eloquent Collections held directly in its properties are serialised by reference and fetched fresh from the database when the job runs, so the Evidence is read as it is then, not as it was when dispatched. Anything else is serialised whole:
 

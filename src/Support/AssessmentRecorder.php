@@ -46,10 +46,14 @@ final class AssessmentRecorder
     /** @var WeakMap<Assessment, Outcome> each of the Judge's Assessments that entered Review, with the Outcome that required it */
     private WeakMap $awaiting;
 
+    /** @var WeakMap<Assessment, Exception> each Assessment refused because recording it failed, with why, so deciding it is refused too */
+    private WeakMap $unrecorded;
+
     public function __construct(private readonly Config $config, private readonly Dispatcher $events, private readonly JudgmentLog $log)
     {
         $this->records = new WeakMap;
         $this->awaiting = new WeakMap;
+        $this->unrecorded = new WeakMap;
     }
 
     /**
@@ -93,7 +97,14 @@ final class AssessmentRecorder
         try {
             $record->save();
         } catch (Exception $e) {
-            $this->notRecorded(AssessmentNotRecorded::for($assessment, $e));
+            $exception = AssessmentNotRecorded::for($assessment, $e);
+            if ($this->required()) {
+                $this->unrecorded[$assessment] = $e;
+
+                throw $exception;
+            }
+
+            $this->report($exception);
             $this->link($assessment, null);
 
             return null;
@@ -102,16 +113,15 @@ final class AssessmentRecorder
         return $this->records[$assessment] = $record;
     }
 
-    /**
-     * Refuse what could not be recorded when judgment.persistence.required is on (ADR-0013);
-     * otherwise report it and carry on, leaving a gap in the audit trail.
-     */
-    private function notRecorded(AssessmentNotRecorded $exception): void
+    /** Whether what cannot be recorded is refused rather than reported (ADR-0013). */
+    private function required(): bool
     {
-        if ($this->config->get('judgment.persistence.required', true)) {
-            throw $exception;
-        }
+        return (bool) $this->config->get('judgment.persistence.required');
+    }
 
+    /** Report a best-effort recording failure: the audit trail now has a gap. */
+    private function report(AssessmentNotRecorded $exception): void
+    {
         report($exception);
         $this->log->notRecorded($exception);
     }
@@ -132,10 +142,14 @@ final class AssessmentRecorder
      * and its Outcome; an Outcome requiring Review puts the record in Review, announced once.
      * From then on the record keeps that Outcome, for the reviewer to resolve.
      *
-     * @throws AssessmentNotRecorded when the Outcome could not be written while judgment.persistence.required is on
+     * @throws AssessmentNotRecorded when the Outcome could not be written, or the Assessment was refused unrecorded,
+     *                               while judgment.persistence.required is on
      */
     public function decided(Assessment $assessment, Decision $decision, Outcome $outcome): void
     {
+        if (isset($this->unrecorded[$assessment])) {
+            throw AssessmentNotRecorded::forOutcome($assessment, $outcome, $this->unrecorded[$assessment]);
+        }
         if (! isset($this->records[$assessment])) {
             return;
         }
@@ -146,8 +160,13 @@ final class AssessmentRecorder
             try {
                 $entersReview = $this->write($record, $decision, $outcome, $entersReview);
             } catch (Exception $e) {
-                $this->notRecorded(AssessmentNotRecorded::outcome($assessment, $outcome, $e));
-                // Best-effort: Review is still required, but the record does not show it.
+                $exception = AssessmentNotRecorded::forOutcome($assessment, $outcome, $e);
+                if ($this->required()) {
+                    throw $exception;
+                }
+
+                // Review is still required, but the record does not show it.
+                $this->report($exception);
                 $record = null;
             }
         }

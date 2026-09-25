@@ -114,3 +114,30 @@ it('returns an Outcome it cannot record when recording is best-effort, still ann
         && $event->outcome === RefundOutcome::Escalate
         && $event->record === null);
 });
+
+it('refuses to decide the Assessment it could not record', function () {
+    Event::fake([AssessmentAwaitingReview::class]);
+    $judgment = returnAbuse();
+    breakRecording();
+
+    try {
+        $judgment->assess();
+        $this->fail('The unrecorded Assessment was returned.');
+    } catch (AssessmentNotRecorded $e) {
+        expect(fn () => $e->assessment->decide(new ReviewedReturnDecision))->toThrow(AssessmentNotRecorded::class);
+        Event::assertNotDispatched(AssessmentAwaitingReview::class);
+    }
+});
+
+it('asks the Engine again after a best-effort Assessment it could not record, having no record to point a cache hit at', function () {
+    config(['judgment.persistence.required' => false]);
+    Exceptions::fake();
+    $engine = new FakeEngine(['hyped' => .8]);
+    app()->instance(Engine::class, $engine);
+    breakRecording();
+
+    (new CachedListingTone('Best jacket ever!!!'))->assess();
+    (new CachedListingTone('Best jacket ever!!!'))->assess();
+
+    expect($engine->requests)->toHaveCount(2);
+});

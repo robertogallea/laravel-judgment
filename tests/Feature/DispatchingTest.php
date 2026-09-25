@@ -3,9 +3,11 @@
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Schema;
 use RobertoGallea\Judgment\Contracts\Engine;
 use RobertoGallea\Judgment\Events\AssessmentCompleted;
 use RobertoGallea\Judgment\Events\AssessmentFailed;
+use RobertoGallea\Judgment\Exceptions\AssessmentNotRecorded;
 use RobertoGallea\Judgment\Exceptions\EngineFailed;
 use RobertoGallea\Judgment\Facades\Judge;
 use RobertoGallea\Judgment\Jobs\AssessJudgment;
@@ -43,6 +45,14 @@ it('completes the job Unassessed when configured to', function () {
     $judgment->dispatch();
 
     Event::assertDispatchedTimes(AssessmentFailed::class, 1);
+});
+
+it('fails the job when the Assessment cannot be recorded, even with throwing on failure off', function () {
+    config(['judgment.throw_on_failure' => false]);
+    $judgment = returnAbuse();
+    Schema::drop('judgment_assessments');
+
+    expect(fn () => $judgment->dispatch())->toThrow(AssessmentNotRecorded::class);
 });
 
 it('queues the Judgment with its Eloquent Subject by reference, restored fresh', function () {

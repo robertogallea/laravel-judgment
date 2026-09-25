@@ -21,10 +21,14 @@ final class AssessmentNotRecorded extends RuntimeException
 
     public static function for(Assessment $assessment, Throwable $previous): self
     {
-        return new self(sprintf('The Assessment of %s could not be recorded: %s', $assessment->judgment::class, $previous->getMessage()), $assessment, $previous);
+        return new self(sprintf(
+            'The Assessment of %s could not be recorded: %s',
+            $assessment->judgment::class,
+            $previous->getMessage(),
+        ), $assessment, $previous);
     }
 
-    public static function outcome(Assessment $assessment, Outcome $outcome, Throwable $previous): self
+    public static function forOutcome(Assessment $assessment, Outcome $outcome, Throwable $previous): self
     {
         return new self(sprintf(
             'The Outcome %s::%s of %s could not be recorded: %s',
