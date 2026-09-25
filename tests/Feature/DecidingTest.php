@@ -1,5 +1,6 @@
 <?php
 
+use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Contracts\Engine;
 use RobertoGallea\Judgment\Exceptions\InvalidDecision;
 use RobertoGallea\Judgment\Exceptions\NoDefaultDecision;
@@ -11,7 +12,7 @@ use RobertoGallea\Judgment\Tests\Fixtures\RefundOutcome;
 use RobertoGallea\Judgment\Tests\Fixtures\StrictRefundDecision;
 use RobertoGallea\Judgment\Tests\Fixtures\UninvokableDecision;
 
-function assessRefund(float $abusive): RobertoGallea\Judgment\Assessment
+function assessRefund(float $abusive): Assessment
 {
     app()->instance(Engine::class, new FakeEngine(['abusive' => $abusive]));
 

@@ -4,9 +4,9 @@ use Illuminate\Support\Facades\File;
 use RobertoGallea\Judgment\Contracts\Engine;
 use RobertoGallea\Judgment\Contracts\Judge;
 use RobertoGallea\Judgment\Exceptions\EngineNotConfigured;
+use RobertoGallea\Judgment\Tests\Fixtures\ConstantEngine;
 use RobertoGallea\Judgment\Tests\Fixtures\Refund;
 use RobertoGallea\Judgment\Tests\Fixtures\RefundAbuse;
-use RobertoGallea\Judgment\Tests\Fixtures\ConstantEngine;
 
 it('registers the Judge contract as a single shared instance', function () {
     expect(app(Judge::class))->toBeInstanceOf(Judge::class)

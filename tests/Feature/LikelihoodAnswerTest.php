@@ -1,11 +1,12 @@
 <?php
 
+use RobertoGallea\Judgment\Answers\LikelihoodAnswer;
 use RobertoGallea\Judgment\Contracts\Engine;
 use RobertoGallea\Judgment\Tests\Fixtures\FakeEngine;
 use RobertoGallea\Judgment\Tests\Fixtures\Refund;
 use RobertoGallea\Judgment\Tests\Fixtures\RefundAbuse;
 
-function abusiveAnswer(float $p): RobertoGallea\Judgment\Answers\LikelihoodAnswer
+function abusiveAnswer(float $p): LikelihoodAnswer
 {
     app()->instance(Engine::class, new FakeEngine(['abusive' => $p]));
 

@@ -6,6 +6,7 @@ use RobertoGallea\Judgment\Exceptions\InvalidQuestion;
 use RobertoGallea\Judgment\Exceptions\MalformedEngineResponse;
 use RobertoGallea\Judgment\Exceptions\UndeclaredLabel;
 use RobertoGallea\Judgment\Exceptions\WrongQuestionKind;
+use RobertoGallea\Judgment\Judgment;
 use RobertoGallea\Judgment\Questions\Likelihood;
 use RobertoGallea\Judgment\Tests\Fixtures\FakeEngine;
 use RobertoGallea\Judgment\Tests\Fixtures\Flag;
@@ -106,7 +107,7 @@ it('rejects an Engine response that leaves a label of the set unanswered, naming
 })->throws(MalformedEngineResponse::class, 'The Engine did not answer Question "flags.self_harm" on '.PostModeration::class.'.');
 
 it('refuses a declared Question whose key collides with a label of a Likelihood Set', function () {
-    $judgment = new class extends RobertoGallea\Judgment\Judgment
+    $judgment = new class extends Judgment
     {
         public function evidence(): array
         {

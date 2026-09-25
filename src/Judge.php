@@ -2,30 +2,62 @@
 
 namespace RobertoGallea\Judgment;
 
+use Exception;
 use Illuminate\Contracts\Container\Container;
+use Illuminate\Contracts\Events\Dispatcher;
 use RobertoGallea\Judgment\Answers\Answer;
 use RobertoGallea\Judgment\Answers\LikelihoodAnswer;
 use RobertoGallea\Judgment\Contracts\Engine;
 use RobertoGallea\Judgment\Contracts\Judge as JudgeContract;
+use RobertoGallea\Judgment\Events\AssessmentCompleted;
+use RobertoGallea\Judgment\Events\AssessmentFailed;
+use RobertoGallea\Judgment\Exceptions\EngineFailed;
 use RobertoGallea\Judgment\Exceptions\InvalidQuestion;
 use RobertoGallea\Judgment\Exceptions\MalformedEngineResponse;
 use RobertoGallea\Judgment\Questions\LikelihoodSet;
 use RobertoGallea\Judgment\Questions\Question;
+use RobertoGallea\Judgment\Support\JudgmentLog;
 
 class Judge implements JudgeContract
 {
     public function __construct(private readonly Container $container) {}
 
-    public function assess(Judgment $judgment): Assessment
+    public function assess(Judgment $judgment): Assessment|Unassessed
     {
         $questions = $judgment->questions();
         $request = new EngineRequest($this->expand($judgment, $questions), $judgment->evidence());
 
-        $response = $this->container->make(Engine::class)->answer($request);
+        $engine = $this->container->make(Engine::class);
+        $response = null;
 
-        $this->ensureEveryQuestionIsAnswered($judgment, $request, $response);
+        try {
+            $response = $engine->answer($request);
+            $this->ensureEveryQuestionIsAnswered($judgment, $request, $response);
+        } catch (EngineFailed $e) {
+            return $this->fail($judgment, $e, $response);
+        } catch (Exception $e) {
+            return $this->fail($judgment, EngineFailed::for($judgment, $e), $response);
+        }
 
-        return new Assessment($judgment, $questions, $this->regroup($questions, $response->answers), $response->provenance);
+        $assessment = new Assessment($judgment, $questions, $this->regroup($questions, $response->answers), $response->provenance);
+
+        $this->container->make(Dispatcher::class)->dispatch(new AssessmentCompleted($judgment, $assessment));
+        $this->container->make(JudgmentLog::class)->assessed($assessment);
+
+        return $assessment;
+    }
+
+    /** Announce and log the failure, then throw it or end Unassessed, as configured. */
+    private function fail(Judgment $judgment, EngineFailed $exception, ?EngineResponse $response): Unassessed
+    {
+        $this->container->make(Dispatcher::class)->dispatch(new AssessmentFailed($judgment, $exception));
+        $this->container->make(JudgmentLog::class)->unassessed($judgment, $exception, $response?->provenance);
+
+        if ($this->container->make('config')->get('judgment.failure') !== 'unassessed') {
+            throw $exception;
+        }
+
+        return new Unassessed($judgment, $exception);
     }
 
     /**

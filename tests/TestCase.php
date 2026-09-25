@@ -3,6 +3,7 @@
 namespace RobertoGallea\Judgment\Tests;
 
 use Orchestra\Testbench\TestCase as Orchestra;
+use RobertoGallea\Judgment\Facades\Judge;
 use RobertoGallea\Judgment\JudgmentServiceProvider;
 
 abstract class TestCase extends Orchestra
@@ -14,6 +15,6 @@ abstract class TestCase extends Orchestra
 
     protected function getPackageAliases($app): array
     {
-        return ['Judge' => \RobertoGallea\Judgment\Facades\Judge::class];
+        return ['Judge' => Judge::class];
     }
 }

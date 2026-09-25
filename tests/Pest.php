@@ -3,6 +3,8 @@
 use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Contracts\Engine;
 use RobertoGallea\Judgment\Tests\Fixtures\FakeEngine;
+use RobertoGallea\Judgment\Tests\Fixtures\Refund;
+use RobertoGallea\Judgment\Tests\Fixtures\RefundAbuse;
 use RobertoGallea\Judgment\Tests\Fixtures\SupportTicket;
 use RobertoGallea\Judgment\Tests\Fixtures\Ticket;
 use RobertoGallea\Judgment\Tests\TestCase;
@@ -24,4 +26,9 @@ function assessTicket(array $answers = []): Assessment
     ]));
 
     return (new SupportTicket(new Ticket('Doppio addebito', 'Mi avete addebitato due volte.')))->assess();
+}
+
+function refundAbuse(): RefundAbuse
+{
+    return new RefundAbuse(new Refund('Headphones', 120, 'Arrived damaged.'));
 }

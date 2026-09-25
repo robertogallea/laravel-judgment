@@ -30,7 +30,7 @@ abstract class Judgment
         return null;
     }
 
-    public function assess(): Assessment
+    public function assess(): Assessment|Unassessed
     {
         return app(Judge::class)->assess($this);
     }
