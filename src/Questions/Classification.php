@@ -9,51 +9,42 @@ use RobertoGallea\Judgment\Exceptions\InvalidQuestion;
 /** A Question answered by choosing among a closed set of labels, with a probability for each. */
 final class Classification extends Question
 {
-    /** @var array<string, string|null> label => description */
-    private array $labels = [];
+    /**
+     * @param  array<string, string|null>  $labels  label => description
+     * @param  class-string<BackedEnum>|null  $enum  the enum the labels come from, if any
+     */
+    private function __construct(
+        string $question,
+        private readonly array $labels,
+        private readonly ?string $enum,
+    ) {
+        parent::__construct($question);
 
-    /** @var class-string<BackedEnum>|null */
-    private ?string $enum = null;
-
-    public static function of(string $question): self
-    {
-        return new self($question);
+        match (true) {
+            count($labels) < 2 => throw InvalidQuestion::tooFewLabels(count($labels)),
+            count($labels) > 255 => throw InvalidQuestion::tooManyLabels(count($labels)),
+            default => null,
+        };
     }
 
     /**
-     * The closed set of labels: a list, a label => description map, or a backed
+     * The closed set of labels is a list, a label => description map, or a backed
      * enum whose values are the labels, described by its description() method if any.
      *
      * @param  list<string>|array<string, string>|class-string<BackedEnum>  $labels
      */
-    public function labels(array|string $labels): self
+    public static function of(string $question, array|string $labels): self
     {
-        $classification = clone $this;
-        $classification->enum = is_string($labels) ? $labels : null;
-
         if (is_string($labels)) {
-            $classification->labels = self::describedCases($labels);
-        } elseif (array_is_list($labels)) {
-            $classification->labels = self::undescribed($labels);
-        } else {
-            /** @var array<string, string> $labels a non-list is a label => description map */
-            $classification->labels = $labels;
+            return new self($question, self::describedCases($labels), $labels);
         }
 
-        match (true) {
-            count($classification->labels) < 2 => throw InvalidQuestion::tooFewLabels(count($classification->labels)),
-            count($classification->labels) > 255 => throw InvalidQuestion::tooManyLabels(count($classification->labels)),
-            default => null,
-        };
-
-        return $classification;
-    }
-
-    public function ensureAnswerable(string $key): void
-    {
-        if ($this->labels === []) {
-            throw InvalidQuestion::noLabels($key);
+        if (array_is_list($labels)) {
+            return new self($question, self::undescribed($labels), null);
         }
+
+        /** @var array<string, string> $labels a non-list is a label => description map */
+        return new self($question, $labels, null);
     }
 
     /** @return array<string, string|null> label => description, so the Engine reads each label as intended */

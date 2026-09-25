@@ -36,14 +36,4 @@ final class InvalidQuestion extends InvalidArgumentException
     {
         return new self(sprintf('A Rating needs 2 to 10 levels; %d given.', $given));
     }
-
-    public static function noLabels(string $key): self
-    {
-        return new self(sprintf('Classification "%s" declares no labels; call labels() on it.', $key));
-    }
-
-    public static function noLevels(string $key): self
-    {
-        return new self(sprintf('Rating "%s" declares no levels; call levels() on it.', $key));
-    }
 }

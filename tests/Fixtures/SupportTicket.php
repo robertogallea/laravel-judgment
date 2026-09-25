@@ -18,12 +18,11 @@ final class SupportTicket extends Judgment
     public function questions(): array
     {
         return [
-            'language' => Classification::of('In which language is the ticket written?')
-                ->labels(['english', 'italian', 'other']),
-            'department' => Classification::of('Which team should handle this ticket?')
-                ->labels(Department::class),
-            'severity' => Rating::of('How badly does the problem affect the customer?')
-                ->levels('Cosmetic', 'Annoying', 'Degrading their work', 'Blocking their work'),
+            'language' => Classification::of('In which language is the ticket written?', labels: ['english', 'italian', 'other']),
+            'department' => Classification::of('Which team should handle this ticket?', labels: Department::class),
+            'severity' => Rating::of('How badly does the problem affect the customer?', levels: [
+                'Cosmetic', 'Annoying', 'Degrading their work', 'Blocking their work',
+            ]),
         ];
     }
 }

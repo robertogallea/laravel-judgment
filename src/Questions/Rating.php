@@ -8,32 +8,20 @@ use RobertoGallea\Judgment\Exceptions\InvalidQuestion;
 /** A Question answered with a position on an ordered scale of described levels. */
 final class Rating extends Question
 {
-    /** @var list<string> */
-    private array $levels = [];
-
-    public static function of(string $question): self
+    /** @param  list<string>  $levels */
+    private function __construct(string $question, private readonly array $levels)
     {
-        return new self($question);
-    }
+        parent::__construct($question);
 
-    /** The ordered levels, lowest first, each described so the Engine reads the scale as intended. */
-    public function levels(string ...$levels): self
-    {
         if (count($levels) < 2 || count($levels) > 10) {
             throw InvalidQuestion::levelsOutOfRange(count($levels));
         }
-
-        $rating = clone $this;
-        $rating->levels = array_values($levels);
-
-        return $rating;
     }
 
-    public function ensureAnswerable(string $key): void
+    /** @param  list<string>  $levels  the ordered levels, lowest first, each described so the Engine reads the scale as intended */
+    public static function of(string $question, array $levels): self
     {
-        if ($this->levels === []) {
-            throw InvalidQuestion::noLevels($key);
-        }
+        return new self($question, $levels);
     }
 
     /** @return list<string> level descriptions, lowest first */

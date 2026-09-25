@@ -19,7 +19,7 @@ final class ProductListing extends Judgment
     {
         return [
             'counterfeit' => Likelihood::that('Is the listed product counterfeit?'),
-            'tone' => Classification::of('What is the tone of the listing title?')->labels(['neutral', 'hyped']),
+            'tone' => Classification::of('What is the tone of the listing title?', labels: ['neutral', 'hyped']),
         ];
     }
 }

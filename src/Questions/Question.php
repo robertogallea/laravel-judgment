@@ -12,7 +12,4 @@ abstract class Question
             throw InvalidQuestion::noInstructions();
         }
     }
-
-    /** Refuse to be asked while still missing what the Engine needs to answer it. */
-    public function ensureAnswerable(string $key): void {}
 }
