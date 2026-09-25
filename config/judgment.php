@@ -29,6 +29,14 @@ return [
     | overloaded requests are retried with exponential backoff, honouring
     | Jev's retry-after hints; the timeout is in seconds, per attempt.
     |
+    | "laya" is a self-hosted Laya server (laya-serve), which speaks Jev's
+    | API with or without a key. Name one of its checkpoints (english,
+    | multilingual, typed-decisions), an alias or Hugging Face id of one:
+    | a name Laya does not know, or convaiinnovations/laya, lets it pick
+    | one per request. Checkpoints carry no version, so allow aliases once
+    | you accept that. Classifications over more than max_labels labels
+    | are rejected here rather than trimmed by Laya.
+    |
     */
 
     'engines' => [
@@ -41,6 +49,18 @@ return [
             'allow_aliases' => env('JUDGMENT_JEV_ALLOW_ALIASES', false),
             'timeout' => env('JUDGMENT_JEV_TIMEOUT', 10),
             'retries' => env('JUDGMENT_JEV_RETRIES', 3),
+        ],
+
+        'laya' => [
+            'driver' => 'jev',
+            'key' => env('LAYA_API_KEY'),
+            'require_key' => false,
+            'url' => env('LAYA_BASE_URL', 'http://localhost:8000'),
+            'model' => env('JUDGMENT_LAYA_MODEL', 'english'),
+            'allow_aliases' => env('JUDGMENT_LAYA_ALLOW_ALIASES', false),
+            'timeout' => env('JUDGMENT_LAYA_TIMEOUT', 10),
+            'retries' => env('JUDGMENT_LAYA_RETRIES', 3),
+            'max_labels' => env('JUDGMENT_LAYA_MAX_LABELS', 20),
         ],
 
     ],

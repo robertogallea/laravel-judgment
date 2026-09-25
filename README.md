@@ -306,7 +306,7 @@ $outcome = $result->outcome();
 
 ## Engines
 
-An Engine answers a Judgment's Questions. Each connection in `judgment.engines` names its driver, and `judgment.engine` (`JUDGMENT_ENGINE`) picks the default connection. The package ships a `jev` connection:
+An Engine answers a Judgment's Questions. Each connection in `judgment.engines` names its driver, and `judgment.engine` (`JUDGMENT_ENGINE`) picks the default connection. The package ships two connections, both on the `jev` driver: `jev` for TypeSafe's hosted Jev API, and [`laya`](#laya) for a self-hosted Laya server. The `jev` connection:
 
 | Option | Env | Default |
 |---|---|---|
@@ -321,7 +321,9 @@ An Engine answers a Judgment's Questions. Each connection in `judgment.engines` 
 
 **Retries.** A rate-limited (429) or overloaded (529) request is retried up to `retries` times. The driver waits as long as Jev's `retry-after-ms` or `retry-after` header asks, capped at a minute. Without a header it backs off exponentially from half a second. Every other error fails at once.
 
-**Provenance.** Each Assessment records the exact model that answered and Jev's `x-typesafe-request-id`, for correlating with TypeSafe support. `$assessment->provenance->details` also holds the token `usage`, Jev's own `confidence` per Classification and Rating, and the raw `response`. Jev's confidence is kept for audit only: `confidence()` on an answer is always the package's own measure.
+**Provenance.** Each Assessment records the connection that answered as its `engine`, the exact model and Jev's `x-typesafe-request-id`, for correlating with TypeSafe support. `$assessment->provenance->details` also holds the token `usage`, Jev's own `confidence` per Classification and Rating, and the raw `response`. Jev's confidence is kept for audit only: `confidence()` on an answer is always the package's own measure.
+
+### Choosing a connection
 
 A Judgment can choose another connection:
 
@@ -341,6 +343,45 @@ use RobertoGallea\Judgment\EngineManager;
 app(EngineManager::class)->extend('classifier', fn ($app, array $config, string $connection) => new ClassifierEngine($config['url']));
 ```
 
+### Laya
+
+[Laya](https://github.com/NandhaKishorM/laya) is an open-source decision engine you run yourself. Its `laya-serve` HTTP server speaks Jev's API, so the `laya` connection uses the `jev` driver pointed at your server:
+
+```bash
+pip install "laya[serve]"
+laya-serve   # listens on 0.0.0.0:8000
+```
+
+```dotenv
+JUDGMENT_ENGINE=laya
+JUDGMENT_LAYA_ALLOW_ALIASES=true
+```
+
+Or keep Jev as the default and [choose Laya per Judgment](#choosing-a-connection) with `engine()` returning `'laya'`.
+
+| Option | Env | Default |
+|---|---|---|
+| `key` | `LAYA_API_KEY` | none; set it when `laya-serve` runs with `LAYA_API_KEY` |
+| `require_key` | | `false` |
+| `url` | `LAYA_BASE_URL` | `http://localhost:8000` |
+| `model` | `JUDGMENT_LAYA_MODEL` | `english` |
+| `allow_aliases` | `JUDGMENT_LAYA_ALLOW_ALIASES` | `false` |
+| `timeout` (seconds, per attempt) | `JUDGMENT_LAYA_TIMEOUT` | `10` |
+| `retries` | `JUDGMENT_LAYA_RETRIES` | `3` |
+| `max_labels` | `JUDGMENT_LAYA_MAX_LABELS` | `20` |
+
+**Choose a checkpoint.** `model` names a Laya checkpoint: `english`, `multilingual` (100+ languages) or `typed-decisions`. Laya also accepts their aliases (such as `en`, `multi` or `typed`), and the Hugging Face ids of the multilingual and typed-decisions checkpoints. Keep it set to one of them. For a name Laya does not know, and for `convaiinnovations/laya`, which Laya treats as auto-routing, it picks a checkpoint per request by language, so different texts could be answered by different checkpoints under the same thresholds. Each Assessment records the checkpoint that answered as its model.
+
+**Allow the alias knowingly.** A checkpoint name carries no version, so a retrained `english` can change underneath calibrated thresholds (ADR-0008). Like any alias, it throws `UnpinnedModel` in production and logs a warning elsewhere until you set `JUDGMENT_LAYA_ALLOW_ALIASES=true`. Recalibrate whenever you update the checkpoints you serve.
+
+**Differences from Jev.**
+- **Calibrate thresholds for Laya.** It is another model, so thresholds calibrated against Jev do not carry over (see [Calibration](#calibration)).
+- **At most `max_labels` labels per Classification.** The package accepts up to 255 (ADR-0012), but Laya fits a question's options into a token budget and trims them beyond about 20 with descriptions, answering over labels it could not fully read. The connection rejects a larger Classification with `EngineRejectedRequest` before asking. Raise `max_labels` only for short labels you have checked, or set it to `null` for the package's own 255. Laya rejects a list it cannot fit at all with a 422, which fails like any other Engine error.
+- **No request id.** Laya sends no `x-typesafe-request-id`, so `request_id` is null.
+- **Its own confidence.** Laya computes `confidence` differently from Jev. It is kept in `provenance->details` for audit only, since `confidence()` on an answer is always the package's own measure (ADR-0005).
+
+A connection on the `jev` driver requires a `key` unless it sets `require_key` to `false`, as `laya` does for a server that runs without one.
+
 ## Caching
 
 A Judgment can reuse the Assessment of identical Evidence and Questions instead of paying for another Engine round. Caching is off by default. Opt in with `cacheFor()`, returning seconds, a `DateInterval` or an expiry:
@@ -356,9 +397,9 @@ The cache key covers:
 - the Judgment class;
 - its question fingerprint;
 - the Evidence fingerprint and the paths of its untrusted text;
-- the Engine class and its pinned `model()`.
+- the Engine class, the connection asked, and its pinned `model()`.
 
-Changing a Question's wording or criteria, the Evidence (including marking text as untrusted), the Engine or its pinned model misses the cache.
+Changing a Question's wording or criteria, the Evidence (including marking text as untrusted), the Engine, the connection or its pinned model misses the cache.
 
 A cache hit is never a silent copy. It is stored as a new record pointing at the original record through `cached_from_id`. It carries the original's Provenance (engine, model, request id), but not the Provenance details: the token usage and raw response stay on the original only, so a hit is never counted as a second Engine round.
 

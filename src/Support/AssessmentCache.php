@@ -15,8 +15,8 @@ use RobertoGallea\Judgment\Questions\Question;
 /**
  * Keeps the Assessments of Judgments that opt in through cacheFor(), keyed on the
  * Judgment, its question fingerprint, the Evidence fingerprint and untrusted paths,
- * and the Engine and its pinned model (ADR-0008), so the same Questions over the
- * same Evidence are not paid for twice.
+ * and the Engine connection and its pinned model (ADR-0008), so the same Questions
+ * over the same Evidence are not paid for twice.
  *
  * @internal
  */
@@ -35,15 +35,16 @@ final class AssessmentCache
      *
      * @param  array<string, Question|LikelihoodSet>  $questions  as declared
      * @param  array<string, mixed>  $evidence  as the Engine is asked
+     * @param  string|null  $connection  the Engine connection asked, since two can serve the same model name
      * @return array{array<string, Answer>, Provenance, ?int}|null
      */
-    public function get(Judgment $judgment, array $questions, array $evidence, Engine $engine): ?array
+    public function get(Judgment $judgment, array $questions, array $evidence, Engine $engine, ?string $connection): ?array
     {
         if ($judgment->cacheFor() === null) {
             return null;
         }
 
-        $cached = $this->cache->get($this->key($judgment, $questions, $evidence, $engine));
+        $cached = $this->cache->get($this->key($judgment, $questions, $evidence, $engine, $connection));
 
         // Cached while persistence was off: a hit recorded now would have no original to point at.
         if (! is_array($cached) || ($cached['record_id'] === null && $this->config->get('judgment.persistence.enabled'))) {
@@ -63,16 +64,17 @@ final class AssessmentCache
      * @param  array<string, Question|LikelihoodSet>  $questions  as declared
      * @param  array<string, Answer>  $answers
      * @param  array<string, mixed>  $evidence  as the Engine was asked
+     * @param  string|null  $connection  the Engine connection asked
      * @param  int|null  $recordId  the id of the record it was stored as, null when persistence is off
      */
-    public function put(Assessment $assessment, array $questions, array $answers, array $evidence, Engine $engine, ?int $recordId): void
+    public function put(Assessment $assessment, array $questions, array $answers, array $evidence, Engine $engine, ?string $connection, ?int $recordId): void
     {
         $ttl = $assessment->judgment->cacheFor();
         if ($ttl === null) {
             return;
         }
 
-        $this->cache->put($this->key($assessment->judgment, $questions, $evidence, $engine), [
+        $this->cache->put($this->key($assessment->judgment, $questions, $evidence, $engine, $connection), [
             'answers' => $this->recorder->encode($answers),
             'engine' => $assessment->provenance->engine,
             'model' => $assessment->provenance->model,
@@ -85,7 +87,7 @@ final class AssessmentCache
      * @param  array<string, Question|LikelihoodSet>  $questions
      * @param  array<string, mixed>  $evidence
      */
-    private function key(Judgment $judgment, array $questions, array $evidence, Engine $engine): string
+    private function key(Judgment $judgment, array $questions, array $evidence, Engine $engine, ?string $connection): string
     {
         return 'judgment:assessment:'.hash('sha256', json_encode([
             $judgment::class,
@@ -94,6 +96,7 @@ final class AssessmentCache
             AssessmentRecorder::evidenceFingerprint($evidence),
             AssessmentRecorder::untrustedPaths($evidence),
             $engine::class,
+            $connection,
             $engine->model(),
         ], JSON_THROW_ON_ERROR));
     }

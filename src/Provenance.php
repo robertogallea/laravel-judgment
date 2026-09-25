@@ -2,7 +2,7 @@
 
 namespace RobertoGallea\Judgment;
 
-/** Which Engine, model version and engine request produced an Assessment. */
+/** Which Engine connection, model version and engine request produced an Assessment. */
 final class Provenance
 {
     /** @param  array<string, mixed>  $details  engine-specific extras (token usage, engine confidence, raw response) */

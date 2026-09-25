@@ -19,12 +19,17 @@ final class EngineNotConfigured extends LogicException
 
     public static function missingKey(string $connection): self
     {
-        return new self(sprintf('The Judgment Engine connection "%1$s" has no API key. Set TYPESAFE_API_KEY or judgment.engines.%1$s.key.', $connection));
+        return new self(sprintf('The Judgment Engine connection "%1$s" has no API key. Set judgment.engines.%1$s.key (TYPESAFE_API_KEY on the shipped jev connection), or set require_key to false for a server that needs none.', $connection));
+    }
+
+    public static function invalidMaxLabels(string $connection): self
+    {
+        return new self(sprintf('The Judgment Engine connection "%1$s" has an invalid max_labels. Set judgment.engines.%1$s.max_labels to 2 or more, or to null for the package limit.', $connection));
     }
 
     public static function missingModel(string $connection): self
     {
-        return new self(sprintf('The Judgment Engine connection "%1$s" has no model. Set an exact version such as "jev-1.13.0" in judgment.engines.%1$s.model.', $connection));
+        return new self(sprintf('The Judgment Engine connection "%1$s" has no model. Set the model it answers with, pinned to an exact version where the Engine has them, in judgment.engines.%1$s.model.', $connection));
     }
 
     public static function notAnEngine(string $connection, string $driver): self
