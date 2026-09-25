@@ -207,7 +207,7 @@ final class JudgeFake implements Judge
     {
         $this->container->make(Dispatcher::class)->dispatch(new AssessmentFailed($judgment, $exception));
 
-        if ($this->container->make('config')->get('judgment.failure') !== 'unassessed') {
+        if ($this->container->make('config')->get('judgment.throw_on_failure')) {
             throw $exception;
         }
 

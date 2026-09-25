@@ -34,7 +34,7 @@ it('announces a failed Assessment with its Judgment and the failure', function (
 });
 
 it('announces the failure when the Judgment ends Unassessed', function () {
-    config(['judgment.failure' => 'unassessed']);
+    config(['judgment.throw_on_failure' => false]);
     app()->instance(Engine::class, new FailingEngine);
 
     $result = refundAbuse()->assess();

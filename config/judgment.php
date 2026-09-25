@@ -47,17 +47,17 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Failure mode
+    | Throwing on failure
     |--------------------------------------------------------------------------
     |
-    | What happens when the Engine fails to produce an Assessment. "throw"
-    | raises an EngineFailed exception; "unassessed" returns the Judgment in
-    | an Unassessed state instead, which the application must handle. A failure is never
-    | turned into a default Outcome.
+    | What happens when the Engine fails to produce an Assessment. When true,
+    | an EngineFailed exception is raised; when false, the Judgment is returned
+    | in an Unassessed state instead, which the application must handle. A
+    | failure is never turned into a default Outcome.
     |
     */
 
-    'failure' => env('JUDGMENT_FAILURE', 'throw'),
+    'throw_on_failure' => env('JUDGMENT_THROW_ON_FAILURE', true),
 
     /*
     |--------------------------------------------------------------------------
@@ -89,10 +89,17 @@ return [
     | Records older than "retention_days" are removed by model:prune; null
     | keeps them forever.
     |
+    | With "required" on, an Assessment or Outcome that cannot be recorded is
+    | refused with AssessmentNotRecorded, even with throw_on_failure off, so no
+    | unrecorded judgment is acted on (ADR-0013). Turn it off to keep working
+    | through a database outage: the failure is reported and logged, and the
+    | audit trail has a gap.
+    |
     */
 
     'persistence' => [
         'enabled' => env('JUDGMENT_PERSIST', true),
+        'required' => env('JUDGMENT_PERSIST_REQUIRED', true),
         'evidence' => env('JUDGMENT_PERSIST_EVIDENCE', true),
         'retention_days' => env('JUDGMENT_RETENTION_DAYS', 365),
     ],

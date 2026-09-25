@@ -13,7 +13,7 @@ interface Judge
     /**
      * Ask the Judgment's Questions over its Evidence in one Engine round.
      *
-     * @throws EngineFailed when the Engine fails, unless judgment.failure is "unassessed"
+     * @throws EngineFailed when the Engine fails, unless judgment.throw_on_failure is off
      */
     public function assess(Judgment $judgment): Assessment|Unassessed;
 

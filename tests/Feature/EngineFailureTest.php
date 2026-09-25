@@ -20,7 +20,7 @@ it('throws a package exception when the Engine fails', function () {
 });
 
 it('ends Unassessed when configured to, holding the Judgment and the failure', function () {
-    config(['judgment.failure' => 'unassessed']);
+    config(['judgment.throw_on_failure' => false]);
     app()->instance(Engine::class, new FailingEngine);
     $judgment = refundAbuse();
 
@@ -37,7 +37,7 @@ it('offers no way to reach an Outcome from an Unassessed Judgment', function () 
 });
 
 it('treats a malformed Engine response as a failure', function () {
-    config(['judgment.failure' => 'unassessed']);
+    config(['judgment.throw_on_failure' => false]);
     app()->instance(Engine::class, new FakeEngine([]));
 
     $result = refundAbuse()->assess();
@@ -47,7 +47,7 @@ it('treats a malformed Engine response as a failure', function () {
 });
 
 it('lets programming errors through instead of ending Unassessed', function () {
-    config(['judgment.failure' => 'unassessed']);
+    config(['judgment.throw_on_failure' => false]);
     app()->instance(Engine::class, new class implements Engine
     {
         public function model(): string

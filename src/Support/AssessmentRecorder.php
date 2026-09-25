@@ -2,6 +2,7 @@
 
 namespace RobertoGallea\Judgment\Support;
 
+use Exception;
 use Illuminate\Contracts\Config\Repository as Config;
 use Illuminate\Contracts\Events\Dispatcher;
 use LogicException;
@@ -14,6 +15,7 @@ use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Contracts\Decision;
 use RobertoGallea\Judgment\Contracts\Outcome;
 use RobertoGallea\Judgment\Events\AssessmentAwaitingReview;
+use RobertoGallea\Judgment\Exceptions\AssessmentNotRecorded;
 use RobertoGallea\Judgment\Exceptions\UnrebuildableAssessment;
 use RobertoGallea\Judgment\Judgment;
 use RobertoGallea\Judgment\Models\AssessmentRecord;
@@ -44,10 +46,14 @@ final class AssessmentRecorder
     /** @var WeakMap<Assessment, Outcome> each of the Judge's Assessments that entered Review, with the Outcome that required it */
     private WeakMap $awaiting;
 
-    public function __construct(private readonly Config $config, private readonly Dispatcher $events)
+    /** @var WeakMap<Assessment, Exception> each Assessment refused because recording it failed, with why, so deciding it is refused too */
+    private WeakMap $unrecorded;
+
+    public function __construct(private readonly Config $config, private readonly Dispatcher $events, private readonly JudgmentLog $log)
     {
         $this->records = new WeakMap;
         $this->awaiting = new WeakMap;
+        $this->unrecorded = new WeakMap;
     }
 
     /**
@@ -55,7 +61,9 @@ final class AssessmentRecorder
      * @param  array<string, Answer>  $answers
      * @param  array<string, mixed>  $evidence  as the Engine was asked
      * @param  int|null  $cachedFrom  for a cache hit, the id of the record the Engine's Assessment was first stored as
-     * @return AssessmentRecord|null null when judgment.persistence.enabled is off
+     * @return AssessmentRecord|null null when judgment.persistence.enabled is off, or recording failed while it is not required
+     *
+     * @throws AssessmentNotRecorded when recording failed while judgment.persistence.required is on
      */
     public function record(Assessment $assessment, array $questions, array $answers, array $evidence, ?int $cachedFrom = null): ?AssessmentRecord
     {
@@ -85,9 +93,37 @@ final class AssessmentRecorder
         if ($subject?->exists) {
             $record->subject()->associate($subject);
         }
-        $record->save();
+
+        try {
+            $record->save();
+        } catch (Exception $e) {
+            $exception = AssessmentNotRecorded::for($assessment, $e);
+            if ($this->required()) {
+                $this->unrecorded[$assessment] = $e;
+
+                throw $exception;
+            }
+
+            $this->report($exception);
+            $this->link($assessment, null);
+
+            return null;
+        }
 
         return $this->records[$assessment] = $record;
+    }
+
+    /** Whether what cannot be recorded is refused rather than reported (ADR-0013). */
+    private function required(): bool
+    {
+        return (bool) $this->config->get('judgment.persistence.required');
+    }
+
+    /** Report a best-effort recording failure: the audit trail now has a gap. */
+    private function report(AssessmentNotRecorded $exception): void
+    {
+        report($exception);
+        $this->log->notRecorded($exception);
     }
 
     /**
@@ -105,9 +141,15 @@ final class AssessmentRecorder
      * Store the Decision last applied to a Judge's Assessment, its version if it declares one,
      * and its Outcome; an Outcome requiring Review puts the record in Review, announced once.
      * From then on the record keeps that Outcome, for the reviewer to resolve.
+     *
+     * @throws AssessmentNotRecorded when the Outcome could not be written, or the Assessment was refused unrecorded,
+     *                               while judgment.persistence.required is on
      */
     public function decided(Assessment $assessment, Decision $decision, Outcome $outcome): void
     {
+        if (isset($this->unrecorded[$assessment])) {
+            throw AssessmentNotRecorded::forOutcome($assessment, $outcome, $this->unrecorded[$assessment]);
+        }
         if (! isset($this->records[$assessment])) {
             return;
         }
@@ -115,7 +157,18 @@ final class AssessmentRecorder
         $record = $this->records[$assessment] ?: null;
         $entersReview = $outcome->requiresReview() && ! isset($this->awaiting[$assessment]);
         if ($record !== null) {
-            $entersReview = $this->write($record, $decision, $outcome, $entersReview);
+            try {
+                $entersReview = $this->write($record, $decision, $outcome, $entersReview);
+            } catch (Exception $e) {
+                $exception = AssessmentNotRecorded::forOutcome($assessment, $outcome, $e);
+                if ($this->required()) {
+                    throw $exception;
+                }
+
+                // Review is still required, but the record does not show it.
+                $this->report($exception);
+                $record = null;
+            }
         }
         if (! $entersReview) {
             return;
