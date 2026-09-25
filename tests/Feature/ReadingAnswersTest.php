@@ -1,15 +1,16 @@
 <?php
 
+use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Contracts\Engine;
 use RobertoGallea\Judgment\Exceptions\UndeclaredQuestion;
 use RobertoGallea\Judgment\Exceptions\WrongQuestionKind;
-use RobertoGallea\Judgment\Tests\Fixtures\FakeEngine;
 use RobertoGallea\Judgment\Tests\Fixtures\Department;
+use RobertoGallea\Judgment\Tests\Fixtures\FakeEngine;
 use RobertoGallea\Judgment\Tests\Fixtures\ProductListing;
 use RobertoGallea\Judgment\Tests\Fixtures\SupportTicket;
 use RobertoGallea\Judgment\Tests\Fixtures\TicketQuestion;
 
-function assessListing(): RobertoGallea\Judgment\Assessment
+function assessListing(): Assessment
 {
     app()->instance(Engine::class, new FakeEngine(['counterfeit' => .10, 'tone' => ['neutral' => .70, 'hyped' => .30]]));
 

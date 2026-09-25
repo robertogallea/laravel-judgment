@@ -20,8 +20,8 @@ final class FakeEngine implements Engine
 
     /**
      * @param  array<string, float|non-empty-array<string, float>|non-empty-list<float>>  $answers  a probability per Likelihood,
-     *                                                                                   a label => probability map per Classification,
-     *                                                                                   a probability per level per Rating
+     *                                                                                              a label => probability map per Classification,
+     *                                                                                              a probability per level per Rating
      */
     public function __construct(private readonly array $answers) {}
 
