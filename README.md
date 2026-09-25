@@ -66,6 +66,8 @@ php artisan vendor:publish --tag=judgment-migrations
 php artisan migrate
 ```
 
+The migration is published with the current timestamp. Republishing with `--force` overwrites the file you already published rather than adding a second one.
+
 ## Declaring a Judgment
 
 A Judgment is constructed with its Subject, like a Mailable. It declares its Evidence explicitly, the Questions to ask, and optionally a default Decision.
