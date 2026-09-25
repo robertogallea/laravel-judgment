@@ -61,6 +61,26 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Persistence
+    |--------------------------------------------------------------------------
+    |
+    | Every Assessment is recorded in the judgment_assessments table, for
+    | audit, replay, Review and Calibration (publish the migration with the
+    | judgment-migrations tag). Turn "evidence" off to store only a SHA-256
+    | fingerprint of the Evidence, for instance when it holds personal data.
+    | Records older than "retention_days" are removed by model:prune; null
+    | keeps them forever.
+    |
+    */
+
+    'persistence' => [
+        'enabled' => env('JUDGMENT_PERSIST', true),
+        'evidence' => env('JUDGMENT_PERSIST_EVIDENCE', true),
+        'retention_days' => env('JUDGMENT_RETENTION_DAYS', 365),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Logging
     |--------------------------------------------------------------------------
     |

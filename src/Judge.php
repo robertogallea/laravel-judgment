@@ -16,6 +16,7 @@ use RobertoGallea\Judgment\Exceptions\InvalidQuestion;
 use RobertoGallea\Judgment\Exceptions\MalformedEngineResponse;
 use RobertoGallea\Judgment\Questions\LikelihoodSet;
 use RobertoGallea\Judgment\Questions\Question;
+use RobertoGallea\Judgment\Support\AssessmentRecorder;
 use RobertoGallea\Judgment\Support\JudgmentLog;
 
 class Judge implements JudgeContract
@@ -41,7 +42,9 @@ class Judge implements JudgeContract
             return $this->fail($judgment, EngineFailed::for($judgment, $e), $response);
         }
 
-        $assessment = new Assessment($judgment, $questions, $this->regroup($questions, $response->answers), $response->provenance);
+        $answers = $this->regroup($questions, $response->answers);
+        $assessment = new Assessment($judgment, $questions, $answers, $response->provenance);
+        $this->container->make(AssessmentRecorder::class)->record($assessment, $questions, $answers, $request->evidence);
 
         $this->container->make(Dispatcher::class)->dispatch(new AssessmentCompleted($judgment, $assessment));
         $this->container->make(JudgmentLog::class)->assessed($assessment);

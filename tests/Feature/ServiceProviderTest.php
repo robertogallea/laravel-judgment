@@ -22,3 +22,14 @@ it('publishes its config file', function () {
 
     File::delete(config_path('judgment.php'));
 });
+
+it('publishes its migration', function () {
+    $published = fn () => File::glob(database_path('migrations/*_create_judgment_assessments_table.php'));
+    File::delete($published());
+
+    $this->artisan('vendor:publish', ['--tag' => 'judgment-migrations'])->assertSuccessful();
+
+    expect($published())->toHaveCount(1);
+
+    File::delete($published());
+});

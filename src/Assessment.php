@@ -21,6 +21,7 @@ use RobertoGallea\Judgment\Questions\Likelihood;
 use RobertoGallea\Judgment\Questions\LikelihoodSet;
 use RobertoGallea\Judgment\Questions\Question;
 use RobertoGallea\Judgment\Questions\Rating;
+use RobertoGallea\Judgment\Support\AssessmentRecorder;
 use RobertoGallea\Judgment\Support\JudgmentLog;
 use RobertoGallea\Judgment\Testing\FakeAssessment;
 
@@ -99,6 +100,7 @@ final class Assessment
         }
 
         app(JudgmentLog::class)->decided($this, $decision, $outcome);
+        app(AssessmentRecorder::class)->decided($this, $decision, $outcome);
 
         return $outcome;
     }
