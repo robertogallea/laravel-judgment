@@ -3,6 +3,7 @@
 use PHPUnit\Framework\AssertionFailedError;
 use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Contracts\Engine;
+use RobertoGallea\Judgment\EngineManager;
 use RobertoGallea\Judgment\EngineRequest;
 use RobertoGallea\Judgment\Exceptions\EngineFailed;
 use RobertoGallea\Judgment\Exceptions\ExhaustedSequence;
@@ -11,8 +12,8 @@ use RobertoGallea\Judgment\Exceptions\RealEngineCallPrevented;
 use RobertoGallea\Judgment\Exceptions\UnscriptedJudgment;
 use RobertoGallea\Judgment\Exceptions\UnscriptedQuestion;
 use RobertoGallea\Judgment\Facades\Judge;
+use RobertoGallea\Judgment\Tests\Fixtures\ConstantEngine;
 use RobertoGallea\Judgment\Tests\Fixtures\Department;
-use RobertoGallea\Judgment\Tests\Fixtures\FakeEngine;
 use RobertoGallea\Judgment\Tests\Fixtures\ImpureRefundDecision;
 use RobertoGallea\Judgment\Tests\Fixtures\PostModeration;
 use RobertoGallea\Judgment\Tests\Fixtures\ProductReview;
@@ -94,7 +95,7 @@ it('fails when a Decision reads a Question the script left out', function () {
 })->throws(UnscriptedQuestion::class, 'Question "abusive" on '.RefundAbuse::class.' was not scripted');
 
 it('prevents real Engine calls while the Judge is faked', function () {
-    config(['judgment.engine' => FakeEngine::class]);
+    config(['judgment.engine' => 'constant', 'judgment.engines.constant' => ['driver' => ConstantEngine::class]]);
     Judge::fake();
 
     app(Engine::class)->answer(new EngineRequest([], []));
@@ -143,3 +144,10 @@ it('asserts nothing was assessed', function () {
 
     expect(fn () => Judge::assertNothingAssessed())->toThrow(AssertionFailedError::class, 'Expected nothing to be assessed, but 1 Judgment was: '.RefundAbuse::class.'.');
 });
+
+it('prevents real Engine calls on named connections while the Judge is faked', function () {
+    config(['judgment.engines.constant' => ['driver' => ConstantEngine::class]]);
+    Judge::fake();
+
+    app(EngineManager::class)->engine('constant')->answer(new EngineRequest([], []));
+})->throws(RealEngineCallPrevented::class, 'The Judge is faked, so real Engine calls are prevented.');

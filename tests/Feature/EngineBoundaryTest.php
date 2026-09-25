@@ -1,12 +1,15 @@
 <?php
 
 use RobertoGallea\Judgment\Contracts\Engine;
+use RobertoGallea\Judgment\Evidence;
 use RobertoGallea\Judgment\Exceptions\MalformedEngineResponse;
 use RobertoGallea\Judgment\Tests\Fixtures\FakeEngine;
 use RobertoGallea\Judgment\Tests\Fixtures\Refund;
 use RobertoGallea\Judgment\Tests\Fixtures\RefundAbuse;
 use RobertoGallea\Judgment\Tests\Fixtures\RefundDecision;
 use RobertoGallea\Judgment\Tests\Fixtures\RefundOutcome;
+use RobertoGallea\Judgment\Tests\Fixtures\SpamCheck;
+use RobertoGallea\Judgment\UntrustedText;
 
 it('never sends an Outcome or a Decision to the Engine', function () {
     $engine = new FakeEngine(['abusive' => .80]);
@@ -36,3 +39,15 @@ it('rejects an Engine response that answers an undeclared Question', function ()
 
     (new RefundAbuse(new Refund('Headphones', 120, 'Arrived damaged.')))->assess();
 })->throws(MalformedEngineResponse::class, 'The Engine answered Question "fraud", which '.RefundAbuse::class.' does not declare.');
+
+it('hands untrusted Evidence to the Engine marked, at the path it was declared', function () {
+    $engine = new FakeEngine(['spam' => .9]);
+    app()->instance(Engine::class, $engine);
+
+    (new SpamCheck(Evidence::untrusted('Buy now!')))->assess();
+
+    $message = $engine->requests[0]->evidence['message'];
+    expect($message)->toBeInstanceOf(UntrustedText::class)
+        ->and($message->text)->toBe('Buy now!')
+        ->and(json_encode($engine->requests[0]->evidence))->toBe('{"message":"Buy now!"}');
+});

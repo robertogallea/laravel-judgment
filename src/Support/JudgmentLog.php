@@ -50,6 +50,12 @@ final class JudgmentLog
         ]);
     }
 
+    /** Warned whatever judgment.log says: it is about configuration, not one Judgment. */
+    public function unpinnedModel(string $connection, string $model): void
+    {
+        $this->logger()->warning('Judgment Engine model is an alias, not an exact version.', ['connection' => $connection, 'model' => $model]);
+    }
+
     /** Null when judgment.log is off. */
     private function channel(): ?LoggerInterface
     {
@@ -57,6 +63,11 @@ final class JudgmentLog
             return null;
         }
 
+        return $this->logger();
+    }
+
+    private function logger(): LoggerInterface
+    {
         $channel = $this->config->get('judgment.log_channel');
 
         return is_string($channel) ? $this->log->channel($channel) : $this->log;

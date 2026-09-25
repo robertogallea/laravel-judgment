@@ -10,13 +10,13 @@ Judgment is for criteria that can only be described and hard rules can be implem
 composer require robertogallea/laravel-judgment
 ```
 
-Point the package at an Engine, a class implementing `RobertoGallea\Judgment\Contracts\Engine`:
+Judgments are assessed on [Jev](https://docs.typesafe.ai) by default. Set your API key:
 
 ```dotenv
-JUDGMENT_ENGINE="App\Judgment\MyEngine"
+TYPESAFE_API_KEY=your-key
 ```
 
-To publish the config file: `php artisan vendor:publish --tag=judgment-config`.
+To publish the config file: `php artisan vendor:publish --tag=judgment-config`. See [Engines](#engines) for the Jev options and for other Engines.
 
 ## Declaring a Judgment
 
@@ -54,6 +54,18 @@ final class RefundAbuse extends Judgment
 ```
 
 Every Question is asked independently, and is phrased about the world, never about what to do.
+
+### Untrusted Evidence
+
+Mark text written by an end user with `Evidence::untrusted()`, so the Engine treats it as a claim to assess and never as instructions:
+
+```php
+use RobertoGallea\Judgment\Evidence;
+
+'request' => ['explanation' => Evidence::untrusted($this->refund->explanation)],
+```
+
+The text stays at the path where you declared it, so a Question can still refer to `request.explanation`. The Jev driver sends it at that path, fenced in tags that the text cannot close and prefaced by a note on how to read it. Other Engines receive an `UntrustedText` value, which serialises to the plain text.
 
 ## Questions
 
@@ -183,7 +195,16 @@ A generated Decision contains no thresholds, only a commented placeholder arm, a
 
 ## When the Engine fails
 
-A failed Engine call is never turned into a default Outcome. By default `assess()` throws `RobertoGallea\Judgment\Exceptions\EngineFailed`, wrapping the exception the Engine threw. Errors such as a `TypeError` are bugs, not Engine failures, and pass through unwrapped. A response that leaves a Question unanswered, or answers one that was not asked, throws `MalformedEngineResponse`, which extends `EngineFailed`.
+A failed Engine call is never turned into a default Outcome. By default `assess()` throws `RobertoGallea\Judgment\Exceptions\EngineFailed`, wrapping the exception the Engine threw. Errors such as a `TypeError` are bugs, not Engine failures, and pass through unwrapped. A response that leaves a Question unanswered, answers one that was not asked, or cannot be read (such as a Classification answered with undeclared labels) throws `MalformedEngineResponse`, which extends `EngineFailed`.
+
+The Jev driver reports each kind of error with its own exception. All of them extend `EngineFailed`, and each message carries the Engine request id:
+
+| Jev status | Exception |
+|---|---|
+| 400, 422 | `EngineRejectedRequest`: the request is invalid (such as an unknown model), so retrying will not help |
+| 401, 403 | `EngineUnauthorized`: the API key is wrong or missing |
+| 429 | `EngineRateLimited`, once the retries are used up |
+| 529 | `EngineOverloaded`, once the retries are used up |
 
 To handle failures as data instead, set the failure mode to `unassessed`:
 
@@ -208,6 +229,43 @@ $outcome = $result->outcome();
 ```
 
 `assess()` is typed `Assessment|Unassessed` in both modes; in the default mode it never returns `Unassessed`.
+
+## Engines
+
+An Engine answers a Judgment's Questions. Each connection in `judgment.engines` names its driver, and `judgment.engine` (`JUDGMENT_ENGINE`) picks the default connection. The package ships a `jev` connection:
+
+| Option | Env | Default |
+|---|---|---|
+| `key` | `TYPESAFE_API_KEY` | none, required |
+| `url` | `TYPESAFE_BASE_URL` | `https://api.typesafe.ai` |
+| `model` | `JUDGMENT_JEV_MODEL` | `jev-1.13.0` |
+| `allow_aliases` | `JUDGMENT_JEV_ALLOW_ALIASES` | `false` |
+| `timeout` (seconds, per attempt) | `JUDGMENT_JEV_TIMEOUT` | `10` |
+| `retries` | `JUDGMENT_JEV_RETRIES` | `3` |
+
+**Pin the model.** You calibrate thresholds against one model version, so the model is pinned to an exact version by default. An alias such as `jev-latest` can change underneath those thresholds, so it throws `UnpinnedModel` in production and logs a warning in other environments, unless you set `allow_aliases` on the connection.
+
+**Retries.** A rate-limited (429) or overloaded (529) request is retried up to `retries` times. The driver waits as long as Jev's `retry-after-ms` or `retry-after` header asks, capped at a minute. Without a header it backs off exponentially from half a second. Every other error fails at once.
+
+**Provenance.** Each Assessment records the exact model that answered and Jev's `x-typesafe-request-id`, for correlating with TypeSafe support. `$assessment->provenance->details` also holds the token `usage`, Jev's own `confidence` per Classification and Rating, and the raw `response`. Jev's confidence is kept for audit only: `confidence()` on an answer is always the package's own measure.
+
+A Judgment can choose another connection:
+
+```php
+public function engine(): ?string
+{
+    return 'jev-eu';
+}
+```
+
+A connection's `driver` is `jev`, a driver you register, or a class implementing `RobertoGallea\Judgment\Contracts\Engine`, which is resolved from the container:
+
+```php
+use RobertoGallea\Judgment\EngineManager;
+
+// config/judgment.php: 'engines' => ['classifier' => ['driver' => 'classifier', 'url' => '...']]
+app(EngineManager::class)->extend('classifier', fn ($app, array $config, string $connection) => new ClassifierEngine($config['url']));
+```
 
 ## Events and logging
 
@@ -283,7 +341,7 @@ Judge::fake([
 
 Answers are written as in `answers()` above. A closure can also return an `Assessment::fake($judgment)` builder, or throw an `EngineFailed` to test failure handling: the fake then fires `AssessmentFailed` and throws or returns `Unassessed` as `judgment.failure` says.
 
-Assessing a Judgment with no script throws `UnscriptedJudgment`, and a sequence that runs out throws `ExhaustedSequence`. While the fake is active the Engine binding throws `RealEngineCallPrevented`, so no test reaches a real Engine. Assessments from the fake fire `AssessmentCompleted` and check every Decision for purity, like `Assessment::fake()`.
+Assessing a Judgment with no script throws `UnscriptedJudgment`, and a sequence that runs out throws `ExhaustedSequence`. While the fake is active every Engine connection throws `RealEngineCallPrevented`, so no test reaches a real Engine. Assessments from the fake fire `AssessmentCompleted` and check every Decision for purity, like `Assessment::fake()`.
 
 Assert what was assessed:
 

@@ -6,6 +6,7 @@ use Closure;
 use Illuminate\Support\Facades\Facade;
 use RobertoGallea\Judgment\Contracts\Engine;
 use RobertoGallea\Judgment\Contracts\Judge as JudgeContract;
+use RobertoGallea\Judgment\EngineManager;
 use RobertoGallea\Judgment\Judgment;
 use RobertoGallea\Judgment\Testing\FakeSequence;
 use RobertoGallea\Judgment\Testing\JudgeFake;
@@ -34,6 +35,7 @@ class Judge extends Facade
 
         static::swap($fake);
         app()->instance(Engine::class, new PreventedEngine);
+        app(EngineManager::class)->prevent(new PreventedEngine);
 
         return $fake;
     }

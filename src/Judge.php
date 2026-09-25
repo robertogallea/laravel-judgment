@@ -27,7 +27,9 @@ class Judge implements JudgeContract
         $questions = $judgment->questions();
         $request = new EngineRequest($this->expand($judgment, $questions), $judgment->evidence());
 
-        $engine = $this->container->make(Engine::class);
+        $engine = $judgment->engine() === null
+            ? $this->container->make(Engine::class)
+            : $this->container->make(EngineManager::class)->engine($judgment->engine());
         $response = null;
 
         try {
