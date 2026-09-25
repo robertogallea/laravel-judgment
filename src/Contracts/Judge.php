@@ -2,6 +2,7 @@
 
 namespace RobertoGallea\Judgment\Contracts;
 
+use Illuminate\Foundation\Bus\PendingDispatch;
 use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Exceptions\EngineFailed;
 use RobertoGallea\Judgment\Judgment;
@@ -15,4 +16,10 @@ interface Judge
      * @throws EngineFailed when the Engine fails, unless judgment.failure is "unassessed"
      */
     public function assess(Judgment $judgment): Assessment|Unassessed;
+
+    /**
+     * Assess the Judgment on the queue, firing the same lifecycle events as assess().
+     * Chain onQueue(), onConnection() or delay() on the result.
+     */
+    public function dispatch(Judgment $judgment): PendingDispatch;
 }

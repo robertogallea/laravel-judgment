@@ -61,6 +61,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Queue
+    |--------------------------------------------------------------------------
+    |
+    | Where Judge::dispatch() queues its assessments. Null uses the
+    | application's default connection and queue. Each attempt is a paid
+    | Engine round, and the Jev driver already retries rate-limited and
+    | overloaded requests, so a failed assessment is tried once by default.
+    |
+    */
+
+    'queue' => [
+        'connection' => env('JUDGMENT_QUEUE_CONNECTION'),
+        'queue' => env('JUDGMENT_QUEUE'),
+        'tries' => env('JUDGMENT_QUEUE_TRIES', 1),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Persistence
     |--------------------------------------------------------------------------
     |

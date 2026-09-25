@@ -3,6 +3,8 @@
 namespace RobertoGallea\Judgment;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Bus\PendingDispatch;
+use Illuminate\Queue\SerializesModels;
 use ReflectionObject;
 use ReflectionProperty;
 use RobertoGallea\Judgment\Contracts\Decision;
@@ -12,10 +14,13 @@ use RobertoGallea\Judgment\Questions\Question;
 
 /**
  * Declares which Questions to ask about its Subject, over which Evidence, and
- * which Decision applies by default. Constructed with its Subject, like a Mailable.
+ * which Decision applies by default. Constructed with its Subject, like a Mailable,
+ * and queued like one: its Eloquent models are serialised by reference.
  */
 abstract class Judgment
 {
+    use SerializesModels;
+
     /**
      * The Subject-specific material the Questions are asked over. Declared
      * explicitly, so adding a column never silently changes what is assessed.
@@ -67,5 +72,11 @@ abstract class Judgment
     public function assess(): Assessment|Unassessed
     {
         return app(Judge::class)->assess($this);
+    }
+
+    /** Assess on the queue; chain onQueue(), onConnection() or delay() on the result. */
+    public function dispatch(): PendingDispatch
+    {
+        return app(Judge::class)->dispatch($this);
     }
 }

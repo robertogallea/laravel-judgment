@@ -5,6 +5,7 @@ namespace RobertoGallea\Judgment\Testing;
 use Closure;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Foundation\Bus\PendingDispatch;
 use PHPUnit\Framework\Assert as PHPUnit;
 use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Contracts\Judge;
@@ -12,6 +13,7 @@ use RobertoGallea\Judgment\Events\AssessmentCompleted;
 use RobertoGallea\Judgment\Events\AssessmentFailed;
 use RobertoGallea\Judgment\Exceptions\EngineFailed;
 use RobertoGallea\Judgment\Exceptions\UnscriptedJudgment;
+use RobertoGallea\Judgment\Jobs\AssessJudgment;
 use RobertoGallea\Judgment\Judgment;
 use RobertoGallea\Judgment\Unassessed;
 
@@ -30,6 +32,9 @@ final class JudgeFake implements Judge
     /** @var list<Judgment> */
     private array $assessed = [];
 
+    /** @var list<Judgment> */
+    private array $dispatched = [];
+
     public function assess(Judgment $judgment): Assessment|Unassessed
     {
         $this->assessed[] = $judgment;
@@ -45,6 +50,53 @@ final class JudgeFake implements Judge
         return $assessment;
     }
 
+    /** Queue the Judgment like the Judge: the job assesses it here, from its script, when the queue runs it. */
+    public function dispatch(Judgment $judgment): PendingDispatch
+    {
+        $this->dispatched[] = $judgment;
+
+        return AssessJudgment::dispatch($judgment);
+    }
+
+    /**
+     * Assert the Judgment was dispatched, at least once matching the callback if given.
+     *
+     * @param  class-string<Judgment>  $judgment
+     * @param  (Closure(Judgment): bool)|null  $callback
+     */
+    public function assertDispatched(string $judgment, ?Closure $callback = null): void
+    {
+        $dispatched = $this->ofClass($this->dispatched, $judgment);
+        PHPUnit::assertNotEmpty($dispatched, "Expected {$judgment} to be dispatched, but it was not.");
+
+        if ($callback !== null) {
+            PHPUnit::assertNotEmpty(
+                array_filter($dispatched, $callback),
+                sprintf('Expected %s to be dispatched matching the callback, but none of the %d dispatched matched.', $judgment, count($dispatched)),
+            );
+        }
+    }
+
+    /**
+     * Assert the Judgment was not dispatched, or never matching the callback if given.
+     *
+     * @param  class-string<Judgment>  $judgment
+     * @param  (Closure(Judgment): bool)|null  $callback
+     */
+    public function assertNotDispatched(string $judgment, ?Closure $callback = null): void
+    {
+        $dispatched = $this->ofClass($this->dispatched, $judgment);
+        $matching = $callback === null ? $dispatched : array_filter($dispatched, $callback);
+
+        PHPUnit::assertEmpty($matching, sprintf(
+            'Expected %s not to be dispatched%s, but it was, %d %s.',
+            $judgment,
+            $callback === null ? '' : ' matching the callback',
+            count($matching),
+            count($matching) === 1 ? 'time' : 'times',
+        ));
+    }
+
     /**
      * Assert the Judgment was assessed, at least once matching the callback if given.
      *
@@ -53,7 +105,7 @@ final class JudgeFake implements Judge
      */
     public function assertAssessed(string $judgment, ?Closure $callback = null): void
     {
-        $assessed = $this->assessedOf($judgment);
+        $assessed = $this->ofClass($this->assessed, $judgment);
         PHPUnit::assertNotEmpty($assessed, "Expected {$judgment} to be assessed, but it was not.");
 
         if ($callback !== null) {
@@ -72,7 +124,7 @@ final class JudgeFake implements Judge
      */
     public function assertNotAssessed(string $judgment, ?Closure $callback = null): void
     {
-        $assessed = $this->assessedOf($judgment);
+        $assessed = $this->ofClass($this->assessed, $judgment);
         $matching = $callback === null ? $assessed : array_filter($assessed, $callback);
 
         PHPUnit::assertEmpty($matching, sprintf(
@@ -95,12 +147,13 @@ final class JudgeFake implements Judge
     }
 
     /**
+     * @param  list<Judgment>  $judgments
      * @param  class-string<Judgment>  $judgment
      * @return list<Judgment>
      */
-    private function assessedOf(string $judgment): array
+    private function ofClass(array $judgments, string $judgment): array
     {
-        return array_values(array_filter($this->assessed, fn (Judgment $assessed) => $assessed instanceof $judgment));
+        return array_values(array_filter($judgments, fn (Judgment $candidate) => $candidate instanceof $judgment));
     }
 
     private function script(Judgment $judgment): FakeAssessment

@@ -14,9 +14,12 @@ use RobertoGallea\Judgment\Testing\PreventedEngine;
 
 /**
  * @method static \RobertoGallea\Judgment\Assessment|\RobertoGallea\Judgment\Unassessed assess(\RobertoGallea\Judgment\Judgment $judgment)
+ * @method static \Illuminate\Foundation\Bus\PendingDispatch dispatch(\RobertoGallea\Judgment\Judgment $judgment)
  * @method static void assertAssessed(class-string<\RobertoGallea\Judgment\Judgment> $judgment, (\Closure(\RobertoGallea\Judgment\Judgment): bool)|null $callback = null)
  * @method static void assertNotAssessed(class-string<\RobertoGallea\Judgment\Judgment> $judgment, (\Closure(\RobertoGallea\Judgment\Judgment): bool)|null $callback = null)
  * @method static void assertNothingAssessed()
+ * @method static void assertDispatched(class-string<\RobertoGallea\Judgment\Judgment> $judgment, (\Closure(\RobertoGallea\Judgment\Judgment): bool)|null $callback = null)
+ * @method static void assertNotDispatched(class-string<\RobertoGallea\Judgment\Judgment> $judgment, (\Closure(\RobertoGallea\Judgment\Judgment): bool)|null $callback = null)
  *
  * @see JudgeContract
  * @see JudgeFake

@@ -352,11 +352,55 @@ Pruning uses Laravel's `model:prune`. The package's model is not in `app/Models`
 Schedule::command('model:prune', ['--model' => [AssessmentRecord::class]])->daily();
 ```
 
+## Queued assessment
+
+Assess a Judgment off the request cycle:
+
+```php
+use RobertoGallea\Judgment\Facades\Judge;
+
+Judge::dispatch(new RefundAbuse($refund));
+(new RefundAbuse($refund))->dispatch()->onQueue('judgments')->delay(now()->addMinute());
+```
+
+Both return Laravel's `PendingDispatch`, so you can chain `onConnection()`, `onQueue()` and `delay()`. The queued job assesses the Judgment and fires the same `AssessmentCompleted` and `AssessmentFailed` events as `assess()`. With `judgment.failure = throw` (the default) a failed assessment fails the job. With `unassessed` the job completes.
+
+A Judgment is queued like a Mailable. Its Eloquent models are serialised by reference and fetched fresh from the database when the job runs, so the Evidence is read as it is then, not as it was when dispatched.
+
+| Key | Env | Default | |
+| --- | --- | --- | --- |
+| `queue.connection` | `JUDGMENT_QUEUE_CONNECTION` | `null` | the application's default connection |
+| `queue.queue` | `JUDGMENT_QUEUE` | `null` | the connection's default queue |
+| `queue.tries` | `JUDGMENT_QUEUE_TRIES` | `1` | each attempt is a paid Engine round, and the Jev driver already retries rate-limited and overloaded requests |
+
+A queued listener of `AssessmentCompleted` receives a copy of the Assessment, which is no longer linked to its record. To record the Outcome, decide through the record the event carries:
+
+```php
+final class ActOnRefundAbuse implements ShouldQueue
+{
+    public function handle(AssessmentCompleted $event): void
+    {
+        $outcome = $event->record?->outcome();                          // the default Decision, recorded
+        // or $event->record?->decide(new StrictRefundDecision());        // another Decision, recorded
+    }
+}
+```
+
+Which call records the Outcome:
+
+| Where | Call | Records the Outcome |
+| --- | --- | --- |
+| The same process as `assess()` | `$assessment->outcome()` / `->decide()` | yes |
+| Across a queue boundary | `$record->outcome()` / `->decide()` | yes |
+| What-if or Calibration | `$record->assessment()->decide()` | no |
+
+Like `assessment()`, the record's `outcome()` and `decide()` take an optional Judgment to rebuild over.
+
 ## Events and logging
 
 Every assessment fires an event:
 
-- `RobertoGallea\Judgment\Events\AssessmentCompleted`, with `$judgment` and `$assessment`
+- `RobertoGallea\Judgment\Events\AssessmentCompleted`, with `$judgment`, `$assessment` and `$record` (the `AssessmentRecord`, or null when persistence is off or under `Judge::fake()`)
 - `RobertoGallea\Judgment\Events\AssessmentFailed`, with `$judgment` and `$exception`, in both failure modes
 
 The package also writes log entries you can trace an assessment by:
@@ -435,6 +479,14 @@ Judge::assertAssessed(RefundAbuse::class);
 Judge::assertAssessed(RefundAbuse::class, fn (RefundAbuse $judgment) => $judgment->refund->is($refund));
 Judge::assertNotAssessed(ProductReview::class);
 Judge::assertNothingAssessed();
+```
+
+The fake dispatches Judgments through the queue like the Judge. On the sync queue the job runs and the fake answers from its script. Under `Queue::fake()` nothing runs. Either way you can assert what was dispatched:
+
+```php
+Judge::assertDispatched(RefundAbuse::class);
+Judge::assertDispatched(RefundAbuse::class, fn (RefundAbuse $judgment) => $judgment->refund->is($refund));
+Judge::assertNotDispatched(ProductReview::class);
 ```
 
 ### Package development
