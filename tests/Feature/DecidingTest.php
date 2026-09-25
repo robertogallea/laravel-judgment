@@ -5,6 +5,7 @@ use RobertoGallea\Judgment\Contracts\Engine;
 use RobertoGallea\Judgment\Exceptions\InvalidDecision;
 use RobertoGallea\Judgment\Exceptions\NoDefaultDecision;
 use RobertoGallea\Judgment\Tests\Fixtures\FakeEngine;
+use RobertoGallea\Judgment\Tests\Fixtures\ImpureRefundDecision;
 use RobertoGallea\Judgment\Tests\Fixtures\ProductReview;
 use RobertoGallea\Judgment\Tests\Fixtures\Refund;
 use RobertoGallea\Judgment\Tests\Fixtures\RefundAbuse;
@@ -51,3 +52,7 @@ it('explains that outcome() needs a default Decision when the Judgment names non
 it('explains how to write a Decision that has no __invoke method', function () {
     assessRefund(.20)->decide(new UninvokableDecision);
 })->throws(InvalidDecision::class, UninvokableDecision::class.' must define __invoke(Assessment $assessment, '.RefundAbuse::class.' $judgment): Outcome.');
+
+it('runs a Decision once on an Assessment from the Engine, leaving the purity check to fakes', function () {
+    expect(assessRefund(.20)->decide(new ImpureRefundDecision))->toBe(RefundOutcome::Approve);
+});

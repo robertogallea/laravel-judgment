@@ -30,14 +30,12 @@ final class Assessment
     /**
      * @param  array<string, Question|LikelihoodSet>  $questions  as declared, so later changes to the Judgment cannot alter what was assessed
      * @param  array<string, Answer>  $answers
-     * @param  bool  $fake  scripted by a test: every Decision is then run twice to check it is pure
      */
     public function __construct(
         public readonly Judgment $judgment,
         private readonly array $questions,
         private readonly array $answers,
         public readonly Provenance $provenance,
-        private readonly bool $fake = false,
     ) {}
 
     /** Script an Assessment of the Judgment for testing its Decisions, without an Engine. */
@@ -95,7 +93,8 @@ final class Assessment
 
         $outcome = $decision($this, $this->judgment);
 
-        if ($this->fake && ($again = $decision($this, $this->judgment)) !== $outcome) {
+        // A scripted Assessment runs the Decision twice, so a test catches an impure one.
+        if (FakeAssessment::scripted($this) && ($again = $decision($this, $this->judgment)) !== $outcome) {
             throw ImpureDecision::for($decision, $outcome, $again);
         }
 

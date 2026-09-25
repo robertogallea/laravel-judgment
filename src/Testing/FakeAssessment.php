@@ -19,10 +19,14 @@ use RobertoGallea\Judgment\Questions\Likelihood;
 use RobertoGallea\Judgment\Questions\LikelihoodSet;
 use RobertoGallea\Judgment\Questions\Question;
 use RobertoGallea\Judgment\Questions\Rating;
+use WeakMap;
 
 /** Scripts an Assessment for testing a Decision, without an Engine. */
 final class FakeAssessment
 {
+    /** @var WeakMap<Assessment, true>|null the Assessments made here, held weakly so they can still be freed */
+    private static ?WeakMap $made = null;
+
     /** @var array<string, Question|LikelihoodSet> */
     private readonly array $questions;
 
@@ -139,7 +143,22 @@ final class FakeAssessment
 
     public function make(): Assessment
     {
-        return new Assessment($this->judgment, $this->questions, $this->answers, new Provenance(engine: 'fake', model: 'fake'), fake: true);
+        $assessment = new Assessment($this->judgment, $this->questions, $this->answers, new Provenance(engine: 'fake', model: 'fake'));
+
+        self::$made ??= new WeakMap;
+        self::$made[$assessment] = true;
+
+        return $assessment;
+    }
+
+    /**
+     * Whether a fake made the Assessment, rather than an Engine.
+     *
+     * @internal
+     */
+    public static function scripted(Assessment $assessment): bool
+    {
+        return isset(self::$made[$assessment]);
     }
 
     /**
