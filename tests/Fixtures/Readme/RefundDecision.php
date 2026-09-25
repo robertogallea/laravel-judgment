@@ -4,6 +4,7 @@ namespace RobertoGallea\Judgment\Tests\Fixtures\Readme;
 
 use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Contracts\Decision;
+use RobertoGallea\Judgment\Tests\Fixtures\RefundOutcome;
 
 final class RefundDecision implements Decision
 {

@@ -33,13 +33,13 @@ Deterministic checks run first, in their usual order: validation (is the input w
 Do not use Judgment:
 
 - **for anything a rule can express.** "Has this customer asked for more than three refunds this year?" is a query. Asking an Engine to count is slower, costs money, and answers with a probability where you already had the truth. Read the count yourself and pass it to your Decision, as `$frequent` does above.
-- **to decide what to do.** A Question asks about the world ("is this claim credible?"), never "should I approve this refund?". The consequence lives in your Decision, where it is deterministic, versioned and testable.
+- **to decide what to do.** A Question asks about the world ("is this claim credible?"), never "should I approve this refund?". The Outcome is chosen by your Decision, where it is deterministic, versioned and testable.
 - **when a wrong answer cannot be caught.** Every Assessment is a probability. If no Outcome can send the uncertain cases to a person, and a wrong automatic call is unacceptable, Judgment is the wrong tool.
 - **where the answer must arrive in a few milliseconds.** An Engine round takes around 0.7 s (see [Latency](#latency)).
 
 ### No Gates, Policies, validation rules, middleware or Blade
 
-These are the first integrations people ask for, and they are missing on purpose (ADR-0007). Authorization and validation must stay deterministic: the same input gets the same answer, every time, and the answer can be explained by reading code. A Policy, validation rule, middleware or `@can`-style directive that consults an Engine turns a probability into a hard allow/deny or pass/fail, with no application-owned Decision in between, no Review band for uncertain cases, and no record of which thresholds applied.
+These are the first integrations people ask for, and they are missing on purpose ([ADR-0007](docs/adr/0007-no-gates-policies-or-validation-integration.md)). Authorization and validation must stay deterministic: the same input gets the same answer, every time, and the answer can be explained by reading code. A Policy, validation rule, middleware or `@can`-style directive that consults an Engine turns a probability into a hard allow/deny or pass/fail, with no application-owned Decision in between, no Review band for uncertain cases, and no record of which thresholds applied.
 
 Assess the Judgment where you would call any other service, then act on its Outcome in your own code. The one sanctioned overlap goes the other way: an ordinary Policy decides who may record a [Resolution](#review-and-resolution).
 
@@ -235,18 +235,20 @@ $outcome = $assessment->outcome();                        // the Judgment's defa
 $outcome = $assessment->decide(new StrictRefundDecision()); // another Decision over the same answers
 ```
 
-The Decision receives the Judgment, and through it the Subject, so it can combine the Engine's answers with facts that are not in question. Lead with a Decision like this one, not with a table of bands on a single Likelihood. In a trial of hand-labelled refund cases, bands on the abuse Likelihood alone (reject at .90, review from .60) sent 86% of clear abuse to Review and approved the ambiguous abusive claims automatically. Combining it with the credibility Rating made no wrong automatic calls at the same Review rate. Those thresholds were fitted to that trial: [calibrate](#calibration) your own.
+The Decision receives the Judgment, and through it the Subject, so it can combine the Engine's answers with facts that are not in question. Lead with a Decision like this one, not with a table of bands on a single Likelihood. In a trial of hand-labelled refund cases, bands on the abuse Likelihood alone (reject at .90, review from .60) sent 86% of clear abuse to Review and approved the ambiguous abusive claims automatically. A Decision combining it with the credibility Rating (the first three arms above) made no wrong automatic calls at the same Review rate. Those thresholds were fitted to that trial: [calibrate](#calibration) your own.
+
+`refundsThisYear()` returns a count loaded with the Subject before assessing, such as a `withCount()` column, never a query of its own: a Decision stays pure (see below).
 
 ### Writing Decisions
 
 - **One condition per `match` arm.** An arm such as `$abusive->above(.30) && ! $frequent =>` is easy to misread, and its tests are easy to get wrong. Give each condition a named local, like `$doubtful` and `$frequent` above, and let the arm order express priority: the first arm that holds wins.
-- **Read a Rating through `expected()`.** `level()` is only the most probable level, so an answer split between Doubtful and Plausible jumps from one to the other. `expected()` is the probability-weighted mean level, and `above()` and `below()` compare against it. Add `confidence()`, the margin between the top two levels, when a split answer should go to Review: `$credibility->confidence() < .3 => RefundOutcome::Escalate`. The same holds for a Classification: `label()` names the winner, `confidence()` says by how much it won.
+- **Read a Rating through `expected()`.** `level()` is only the most probable level, so an answer split between Doubtful and Plausible jumps from one to the other. `expected()` is the probability-weighted mean level, and `above()` and `below()` compare against it. Add `confidence()`, the margin between the top two levels, when a split answer should go to Review: with `$credibility = $assessment->rating('credibility')`, add the arm `$credibility->confidence() < .3 => RefundOutcome::Escalate`. The same holds for a Classification: `label()` names the winner, `confidence()` says by how much it won.
 - **A Likelihood has no Confidence.** Its probability is the measure. Uncertainty shows as a probability in the middle of the scale, which is what a Review band is for.
 - **Keep Decisions pure.** Read only the Assessment and the Judgment: no clock, no database queries, no state of the Decision's own. The fakes run every Decision twice and throw `ImpureDecision` if the Outcomes differ. Load the facts the Decision needs into the Subject before assessing.
 
 ### Thresholds are not exact
 
-An Engine does not answer identical requests identically. In the trial above, repeated requests differed by up to 0.05 in probability, and one case scored .47, .49 and .50 on three identical requests. An Assessment near a threshold may therefore yield a different Outcome if it is assessed again. Do not decide with a single cut-off between two automatic Outcomes: put a Review band around the uncertain region, so a case that wobbles moves between an automatic Outcome and Review, never between Approve and Reject.
+An Engine does not answer identical requests identically. In the trial above, repeated requests differed by up to 0.05 in probability, and one case was given a probability of .47, .49 and .50 on three identical requests. An Assessment near a threshold may therefore yield a different Outcome if it is assessed again. Do not decide with a single cut-off between two automatic Outcomes: put a Review band around the uncertain region, so a case that wobbles moves between an automatic Outcome and Review, never between Approve and Reject.
 
 ## Generating Judgments and Decisions
 
@@ -739,7 +741,7 @@ Assessment::fake(new PostModeration($post))
     ->likelihoodSet('harms', ['spam' => .90])                             // a Likelihood per label (unlisted: 0)
     ->make();
 
-Assessment::fake($judgment)->answers(['abusive' => .80, 'severity' => 2]); // several at once
+Assessment::fake(new RefundAbuse($refund))->answers(['abusive' => .80, 'credibility' => 1]); // several at once
 ```
 
 Each scripted answer is checked against the Judgment's declared Questions: an undeclared key, the wrong kind, an undeclared label, a level outside the scale, or a probability or Confidence outside 0 to 1 throws. A Decision that reads a Question the test did not script throws `UnscriptedQuestion`.
