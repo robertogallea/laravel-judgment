@@ -87,6 +87,11 @@ final class JevEngine implements Engine
         );
     }
 
+    public function model(): string
+    {
+        return $this->model;
+    }
+
     public function answer(EngineRequest $request): EngineResponse
     {
         $response = $this->send([

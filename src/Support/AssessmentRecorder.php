@@ -54,9 +54,10 @@ final class AssessmentRecorder
      * @param  array<string, Question|LikelihoodSet>  $questions  as declared
      * @param  array<string, Answer>  $answers
      * @param  array<string, mixed>  $evidence  as the Engine was asked
+     * @param  int|null  $cachedFrom  for a cache hit, the id of the record the Engine's Assessment was first stored as
      * @return AssessmentRecord|null null when judgment.persistence.enabled is off
      */
-    public function record(Assessment $assessment, array $questions, array $answers, array $evidence): ?AssessmentRecord
+    public function record(Assessment $assessment, array $questions, array $answers, array $evidence, ?int $cachedFrom = null): ?AssessmentRecord
     {
         if (! $this->config->get('judgment.persistence.enabled')) {
             $this->link($assessment, null);
@@ -64,20 +65,19 @@ final class AssessmentRecorder
             return null;
         }
 
-        $json = json_encode($evidence, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
-
         $record = new AssessmentRecord([
             'judgment' => $assessment->judgment::class,
-            'evidence_fingerprint' => hash('sha256', $json),
-            'evidence' => $this->config->get('judgment.persistence.evidence') ? json_decode($json, true, flags: JSON_THROW_ON_ERROR) : null,
-            'untrusted_paths' => $this->untrustedPaths($evidence),
+            'evidence_fingerprint' => self::evidenceFingerprint($evidence),
+            'evidence' => $this->config->get('judgment.persistence.evidence') ? json_decode(self::json($evidence), true, flags: JSON_THROW_ON_ERROR) : null,
+            'untrusted_paths' => self::untrustedPaths($evidence),
             'language' => $assessment->judgment->language(),
             'questions_fingerprint' => self::fingerprint($questions),
-            'answers' => array_map($this->serialise(...), $answers),
+            'answers' => $this->encode($answers),
             'engine' => $assessment->provenance->engine,
             'model' => $assessment->provenance->model,
             'request_id' => $assessment->provenance->requestId,
             'provenance_details' => $assessment->provenance->details,
+            'cached_from_id' => $cachedFrom,
         ]);
 
         // An unsaved Subject has no key to link it by.
@@ -167,17 +167,56 @@ final class AssessmentRecorder
             default => null,
         };
 
-        $answers = [];
-        foreach ($questions as $key => $question) {
-            $answers[$key] = $this->deserialise($question, $record->answers[$key]);
-        }
-
         return new Assessment(
             $judgment,
             $questions,
-            $answers,
+            $this->decode($questions, $record->answers),
             new Provenance($record->engine, $record->model, $record->request_id, $record->provenance_details),
         );
+    }
+
+    /**
+     * The answers as stored: plain probabilities, per Question.
+     *
+     * @param  array<string, Answer>  $answers
+     * @return array<string, float|array<string|int, float>>
+     */
+    public function encode(array $answers): array
+    {
+        return array_map($this->serialise(...), $answers);
+    }
+
+    /**
+     * The answers stored by encode(), read back against the Questions they were given for.
+     *
+     * @param  array<string, Question|LikelihoodSet>  $questions
+     * @param  array<string, mixed>  $stored
+     * @return array<string, Answer>
+     */
+    public function decode(array $questions, array $stored): array
+    {
+        $answers = [];
+        foreach ($questions as $key => $question) {
+            $answers[$key] = $this->deserialise($question, $stored[$key]);
+        }
+
+        return $answers;
+    }
+
+    /**
+     * Identifies the Evidence as the Engine was asked, so identical Evidence is recognised without storing it.
+     *
+     * @param  array<string, mixed>  $evidence
+     */
+    public static function evidenceFingerprint(array $evidence): string
+    {
+        return hash('sha256', self::json($evidence));
+    }
+
+    /** @param  array<string, mixed>  $evidence */
+    private static function json(array $evidence): string
+    {
+        return json_encode($evidence, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
     }
 
     /**
@@ -219,13 +258,13 @@ final class AssessmentRecorder
      * @param  array<array-key, mixed>  $evidence
      * @return list<string>
      */
-    private function untrustedPaths(array $evidence, string $prefix = ''): array
+    public static function untrustedPaths(array $evidence, string $prefix = ''): array
     {
         $paths = [];
         foreach ($evidence as $key => $value) {
             $paths = [...$paths, ...match (true) {
                 $value instanceof UntrustedText => [$prefix.$key],
-                is_array($value) => $this->untrustedPaths($value, "$prefix$key."),
+                is_array($value) => self::untrustedPaths($value, "$prefix$key."),
                 default => [],
             }];
         }

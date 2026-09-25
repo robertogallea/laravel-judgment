@@ -3,6 +3,8 @@
 use Illuminate\Support\Facades\Log;
 use Psr\Log\LoggerInterface;
 use RobertoGallea\Judgment\Contracts\Engine;
+use RobertoGallea\Judgment\Models\AssessmentRecord;
+use RobertoGallea\Judgment\Tests\Fixtures\CachedListingTone;
 use RobertoGallea\Judgment\Tests\Fixtures\FailingEngine;
 use RobertoGallea\Judgment\Tests\Fixtures\FakeEngine;
 use RobertoGallea\Judgment\Tests\Fixtures\RefundAbuse;
@@ -22,6 +24,22 @@ it('logs a completed Assessment with its Judgment, model and engine request id',
         'model' => 'fake-1.0.0',
         'request_id' => 'req-1',
     ]);
+});
+
+it('logs a cache hit apart from an Engine answer, pointing at the original record', function () {
+    app()->instance(Engine::class, new FakeEngine(['hyped' => .80]));
+
+    (new CachedListingTone('Best jacket ever!!!'))->assess();
+    (new CachedListingTone('Best jacket ever!!!'))->assess();
+
+    Log::shouldHaveReceived('info')->with('Judgment assessed.', Mockery::any())->once();
+    Log::shouldHaveReceived('info')->with('Judgment assessed from cache.', [
+        'judgment' => CachedListingTone::class,
+        'engine' => 'fake',
+        'model' => 'fake-1.0.0',
+        'request_id' => 'req-1',
+        'cached_from' => AssessmentRecord::orderBy('id')->value('id'),
+    ])->once();
 });
 
 it('logs a failed Assessment with its Judgment and the failure', function () {

@@ -50,6 +50,11 @@ it('lets programming errors through instead of ending Unassessed', function () {
     config(['judgment.failure' => 'unassessed']);
     app()->instance(Engine::class, new class implements Engine
     {
+        public function model(): string
+        {
+            return 'buggy-1';
+        }
+
         public function answer(EngineRequest $request): EngineResponse
         {
             throw new TypeError('A bug in the Engine.');

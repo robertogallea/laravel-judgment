@@ -2,6 +2,8 @@
 
 namespace RobertoGallea\Judgment;
 
+use DateInterval;
+use DateTimeInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Bus\PendingDispatch;
 use Illuminate\Queue\SerializesModels;
@@ -61,6 +63,15 @@ abstract class Judgment
         }
 
         return count($models) === 1 ? $models[0] : null;
+    }
+
+    /**
+     * How long to reuse the Assessment of identical Evidence and Questions instead of asking the Engine
+     * again: seconds, an interval or an expiry. Null, the default, never caches.
+     */
+    public function cacheFor(): DateTimeInterface|DateInterval|int|null
+    {
+        return null;
     }
 
     /** The Engine connection to ask, from judgment.engines; null asks the default connection. */

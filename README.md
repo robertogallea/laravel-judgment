@@ -265,7 +265,7 @@ public function engine(): ?string
 }
 ```
 
-A connection's `driver` is `jev`, a driver you register, or a class implementing `RobertoGallea\Judgment\Contracts\Engine`, which is resolved from the container:
+A connection's `driver` is `jev`, a driver you register, or a class implementing `RobertoGallea\Judgment\Contracts\Engine`, which is resolved from the container. An Engine implements `answer()`, and `model()` returning the exact model version it answers with, which keys the [cache](#caching):
 
 ```php
 use RobertoGallea\Judgment\EngineManager;
@@ -273,6 +273,35 @@ use RobertoGallea\Judgment\EngineManager;
 // config/judgment.php: 'engines' => ['classifier' => ['driver' => 'classifier', 'url' => '...']]
 app(EngineManager::class)->extend('classifier', fn ($app, array $config, string $connection) => new ClassifierEngine($config['url']));
 ```
+
+## Caching
+
+A Judgment can reuse the Assessment of identical Evidence and Questions instead of paying for another Engine round. Caching is off by default. Opt in with `cacheFor()`, returning seconds, a `DateInterval` or an expiry:
+
+```php
+public function cacheFor(): int
+{
+    return 3600;
+}
+```
+
+The cache key covers:
+- the Judgment class;
+- its question fingerprint;
+- the Evidence fingerprint and the paths of its untrusted text;
+- the Engine class and its pinned `model()`.
+
+Changing a Question's wording or criteria, the Evidence (including marking text as untrusted), the Engine or its pinned model misses the cache.
+
+A cache hit is never a silent copy. It is stored as a new record pointing at the original record through `cached_from_id`. It carries the original's Provenance (engine, model, request id), but not the Provenance details: the token usage and raw response stay on the original only, so a hit is never counted as a second Engine round.
+
+```php
+$record->cachedFrom;   // the original AssessmentRecord; null for an Engine answer, or once the original is pruned
+```
+
+A hit is its own Assessment: it fires `AssessmentCompleted` with its own record, and deciding it records its own Outcome and, if that Outcome requires it, its own Review. It logs `Judgment assessed from cache.` instead of `Judgment assessed.`.
+
+Nothing is cached when the Engine fails. Cached Assessments go to the application's default cache store, which holds the answers and the engine, model and request id, never the Evidence. Caching works with persistence off too. Something cached while persistence was off is not reused once it is on, since a hit would have no original record to point at. `Judge::fake()` answers from its scripts and never caches.
 
 ## Persisted Assessments
 
@@ -288,6 +317,7 @@ Every Assessment is recorded as an `RobertoGallea\Judgment\Models\AssessmentReco
 | `questions_fingerprint` | a SHA-256 of each Question's key, kind, instructions and criteria (labels, levels, meanings) |
 | `answers` | the probabilities, per Question |
 | `engine`, `model`, `request_id`, `provenance_details` | the Provenance |
+| `cached_from_id` | for a [cache hit](#caching), the record the Engine's Assessment was first stored as |
 | `decision`, `decision_version`, `outcome_type`, `outcome` | the Decision last applied, and its Outcome's enum and value |
 | `review_requested_at` | when an Outcome requiring Review put the record in Review |
 | `resolution`, `resolver_type`, `resolver_id`, `resolved_at` | the reviewer's Resolution, who recorded it, and when |
@@ -499,6 +529,7 @@ The package also writes log entries you can trace an assessment by:
 | --- | --- | --- |
 | `Judgment assessed.` | info | `judgment`, `engine`, `model`, `request_id` |
 | `Judgment unassessed.` | warning | `judgment`, `exception`, plus `engine`, `model`, `request_id` when the Engine responded |
+| `Judgment assessed from cache.` | info | as `Judgment assessed.`, plus `cached_from`: the original record's id |
 | `Judgment decided.` | info | `judgment`, `engine`, `model`, `request_id`, `decision`, `outcome` |
 
 They go to the default log channel. Set `JUDGMENT_LOG_CHANNEL` to send them elsewhere, or `JUDGMENT_LOG=false` to turn them off. `$assessment->logContext()` returns the same context for your own log entries.
