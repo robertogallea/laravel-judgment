@@ -4,6 +4,45 @@ Probabilistic assessments of unstructured evidence, with deterministic, applicat
 
 Judgment is for criteria that can only be described and hard rules can be implemented: "is this refund request an attempt to abuse the policy?", "which team should handle this ticket?". It sits after validation, authorization and business rules. An Engine answers typed Questions over the Evidence you declare; your own Decision class turns those answers into an Outcome. The Engine never sees your Outcomes or thresholds.
 
+```php
+final class RefundDecision implements Decision
+{
+    public function __invoke(Assessment $assessment, RefundAbuse $judgment): RefundOutcome
+    {
+        $abusive = $assessment->likelihood('abusive');                          // asked of the Engine
+        $doubtful = $assessment->rating('credibility')->below(2.0);             // asked of the Engine
+        $frequent = $judgment->refund->customer->refundsThisYear() >= 3;       // a fact you already know
+
+        return match (true) {
+            $abusive->above(.65) => RefundOutcome::Reject,
+            $abusive->above(.30) => RefundOutcome::Escalate,
+            $doubtful => RefundOutcome::Escalate,
+            $frequent => RefundOutcome::Escalate,
+            default => RefundOutcome::Approve,
+        };
+    }
+}
+```
+
+## Philosophy
+
+> If you could write the rule, write the rule. Judgment is for criteria you can only describe, over evidence you would otherwise have to read.
+
+Deterministic checks run first, in their usual order: validation (is the input well-formed?), then authorization (is this person allowed to do this?), then your business rules (is the order inside the refund window? is the amount under the limit?). Judgment only sees what is left: a request that is valid, permitted and within the rules, but that a person would still have to read to decide.
+
+Do not use Judgment:
+
+- **for anything a rule can express.** "Has this customer asked for more than three refunds this year?" is a query. Asking an Engine to count is slower, costs money, and answers with a probability where you already had the truth. Read the count yourself and pass it to your Decision, as `$frequent` does above.
+- **to decide what to do.** A Question asks about the world ("is this claim credible?"), never "should I approve this refund?". The consequence lives in your Decision, where it is deterministic, versioned and testable.
+- **when a wrong answer cannot be caught.** Every Assessment is a probability. If no Outcome can send the uncertain cases to a person, and a wrong automatic call is unacceptable, Judgment is the wrong tool.
+- **where the answer must arrive in a few milliseconds.** An Engine round takes around 0.7 s (see [Latency](#latency)).
+
+### No Gates, Policies, validation rules, middleware or Blade
+
+These are the first integrations people ask for, and they are missing on purpose (ADR-0007). Authorization and validation must stay deterministic: the same input gets the same answer, every time, and the answer can be explained by reading code. A Policy, validation rule, middleware or `@can`-style directive that consults an Engine turns a probability into a hard allow/deny or pass/fail, with no application-owned Decision in between, no Review band for uncertain cases, and no record of which thresholds applied.
+
+Assess the Judgment where you would call any other service, then act on its Outcome in your own code. The one sanctioned overlap goes the other way: an ordinary Policy decides who may record a [Resolution](#review-and-resolution).
+
 ## Installation
 
 ```bash
@@ -30,8 +69,10 @@ php artisan migrate
 A Judgment is constructed with its Subject, like a Mailable. It declares its Evidence explicitly, the Questions to ask, and optionally a default Decision.
 
 ```php
+use RobertoGallea\Judgment\Evidence;
 use RobertoGallea\Judgment\Judgment;
 use RobertoGallea\Judgment\Questions\Likelihood;
+use RobertoGallea\Judgment\Questions\Rating;
 
 final class RefundAbuse extends Judgment
 {
@@ -41,7 +82,7 @@ final class RefundAbuse extends Judgment
     {
         return [
             'order' => ['item' => $this->refund->item, 'amount_eur' => $this->refund->amount],
-            'request' => ['explanation' => $this->refund->explanation],
+            'request' => ['explanation' => Evidence::untrusted($this->refund->explanation)],
         ];
     }
 
@@ -50,6 +91,9 @@ final class RefundAbuse extends Judgment
         return [
             'abusive' => Likelihood::that('Is this refund request an attempt to abuse the refund policy?')
                 ->means(true: 'Likely a claim the customer is not entitled to', false: 'A good-faith claim'),
+            'credibility' => Rating::of('How credible is the explanation in request.explanation?', levels: [
+                'Not credible', 'Doubtful', 'Plausible', 'Fully credible',
+            ]),
         ];
     }
 
@@ -60,7 +104,7 @@ final class RefundAbuse extends Judgment
 }
 ```
 
-Every Question is asked independently, and is phrased about the world, never about what to do.
+Every Question is asked independently, and is phrased about the world, never about what to do. The Evidence holds only what a reader needs. The customer's refund count stays out of it, because the Decision reads that from the Subject: the Engine tends to underweight counts, and a fact you already know should never come back as a probability.
 
 ### Untrusted Evidence
 
@@ -174,10 +218,14 @@ final class RefundDecision implements Decision
     public function __invoke(Assessment $assessment, RefundAbuse $judgment): RefundOutcome
     {
         $abusive = $assessment->likelihood('abusive');
+        $doubtful = $assessment->rating('credibility')->below(2.0);
+        $frequent = $judgment->refund->customer->refundsThisYear() >= 3;
 
         return match (true) {
             $abusive->above(.65) => RefundOutcome::Reject,
             $abusive->above(.30) => RefundOutcome::Escalate,
+            $doubtful => RefundOutcome::Escalate,
+            $frequent => RefundOutcome::Escalate,
             default => RefundOutcome::Approve,
         };
     }
@@ -186,6 +234,19 @@ final class RefundDecision implements Decision
 $outcome = $assessment->outcome();                        // the Judgment's default Decision
 $outcome = $assessment->decide(new StrictRefundDecision()); // another Decision over the same answers
 ```
+
+The Decision receives the Judgment, and through it the Subject, so it can combine the Engine's answers with facts that are not in question. Lead with a Decision like this one, not with a table of bands on a single Likelihood. In a trial of hand-labelled refund cases, bands on the abuse Likelihood alone (reject at .90, review from .60) sent 86% of clear abuse to Review and approved the ambiguous abusive claims automatically. Combining it with the credibility Rating made no wrong automatic calls at the same Review rate. Those thresholds were fitted to that trial: [calibrate](#calibration) your own.
+
+### Writing Decisions
+
+- **One condition per `match` arm.** An arm such as `$abusive->above(.30) && ! $frequent =>` is easy to misread, and its tests are easy to get wrong. Give each condition a named local, like `$doubtful` and `$frequent` above, and let the arm order express priority: the first arm that holds wins.
+- **Read a Rating through `expected()`.** `level()` is only the most probable level, so an answer split between Doubtful and Plausible jumps from one to the other. `expected()` is the probability-weighted mean level, and `above()` and `below()` compare against it. Add `confidence()`, the margin between the top two levels, when a split answer should go to Review: `$credibility->confidence() < .3 => RefundOutcome::Escalate`. The same holds for a Classification: `label()` names the winner, `confidence()` says by how much it won.
+- **A Likelihood has no Confidence.** Its probability is the measure. Uncertainty shows as a probability in the middle of the scale, which is what a Review band is for.
+- **Keep Decisions pure.** Read only the Assessment and the Judgment: no clock, no database queries, no state of the Decision's own. The fakes run every Decision twice and throw `ImpureDecision` if the Outcomes differ. Load the facts the Decision needs into the Subject before assessing.
+
+### Thresholds are not exact
+
+An Engine does not answer identical requests identically. In the trial above, repeated requests differed by up to 0.05 in probability, and one case scored .47, .49 and .50 on three identical requests. An Assessment near a threshold may therefore yield a different Outcome if it is assessed again. Do not decide with a single cut-off between two automatic Outcomes: put a Review band around the uncertain region, so a case that wobbles moves between an automatic Outcome and Review, never between Approve and Reject.
 
 ## Generating Judgments and Decisions
 
@@ -386,6 +447,10 @@ Schedule::command('model:prune', ['--model' => [AssessmentRecord::class]])->dail
 
 ## Queued assessment
 
+### Latency
+
+`assess()` blocks for a whole Engine round. Measured against Jev from the EU, a round takes about 0.7 s at the median and 0.8 s at the 95th percentile, and reached 1.6 s at worst. Retries after a rate limit or overload add their wait on top. That is acceptable where a person is waiting for the answer anyway, such as a support agent opening a ticket. Anywhere else, such as a checkout or a form submission, dispatch the Judgment and act on the Outcome from a listener.
+
 Assess a Judgment off the request cycle:
 
 ```php
@@ -452,9 +517,17 @@ enum RefundOutcome: string implements Outcome
 }
 ```
 
-When a recorded Decision yields such an Outcome (through `outcome()` or `decide()`, as in the table above), the record enters Review and `AssessmentAwaitingReview` fires. A record enters Review once, even when two copies of it are decided at the same moment. From then on it keeps the Outcome and Decision that sent it to Review: deciding it again records nothing and fires no event. A what-if on a rebuilt Assessment never starts Review. The package ships no review UI: notify reviewers from the event.
+When a recorded Decision yields such an Outcome (through `outcome()` or `decide()`, as in the table above), the record enters Review and `AssessmentAwaitingReview` fires. A record enters Review once, even when two copies of it are decided at the same moment. From then on it keeps the Outcome and Decision that sent it to Review: deciding it again records nothing and fires no event. A what-if on a rebuilt Assessment never starts Review. The package ships no review UI.
+
+The event carries `$judgment`, `$assessment`, `$outcome`, `$record` and `$requestedAt`. `$record` is null when persistence is off or under `Judge::fake()`, and a record is needed to resolve.
+
+### Recipe: notifying reviewers
+
+Listen for `AssessmentAwaitingReview` and send an ordinary Laravel notification. Queue the listener, so a slow mail server never holds up the request that decided the Outcome:
 
 ```php
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Support\Facades\Notification;
 use RobertoGallea\Judgment\Events\AssessmentAwaitingReview;
 
 final class NotifyReviewers implements ShouldQueue
@@ -465,12 +538,42 @@ final class NotifyReviewers implements ShouldQueue
             return; // persistence is off: nothing to resolve
         }
 
-        Notification::send(User::reviewers()->get(), new RefundNeedsReview($event->record, $event->outcome, $event->requestedAt));
+        if ($event->judgment instanceof RefundAbuse) {
+            Notification::send(User::refundReviewers()->get(), new RefundNeedsReview($event->record));
+        }
     }
 }
 ```
 
-The event carries `$judgment`, `$assessment`, `$outcome`, `$record` and `$requestedAt`. `$record` is null when persistence is off or under `Judge::fake()`, and a record is needed to resolve. Find the records awaiting Review with the `awaitingReview` scope:
+With Laravel's event discovery the listener is registered by its type hint. Otherwise register it in a service provider: `Event::listen(AssessmentAwaitingReview::class, NotifyReviewers::class)`.
+
+The notification carries the record, which holds everything a reviewer needs: the Subject, the Evidence as the Engine saw it, the answers and the automatic Outcome.
+
+```php
+use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Notifications\Notification;
+use RobertoGallea\Judgment\Models\AssessmentRecord;
+
+final class RefundNeedsReview extends Notification
+{
+    public function __construct(public readonly AssessmentRecord $record) {}
+
+    public function via(object $notifiable): array
+    {
+        return ['mail'];
+    }
+
+    public function toMail(object $notifiable): MailMessage
+    {
+        return (new MailMessage)
+            ->subject('A refund needs review')
+            ->line("Refund #{$this->record->subject_id} was sent to Review as {$this->record->outcome}.")
+            ->action('Review it', route('refund-reviews.show', $this->record));
+    }
+}
+```
+
+Find the records awaiting Review with the `awaitingReview` scope, for example to build the review queue that link opens:
 
 ```php
 AssessmentRecord::awaitingReview()->where('judgment', RefundAbuse::class)->oldest('review_requested_at')->get();
@@ -531,7 +634,7 @@ A bare Judgment name is looked up under `App\Judgments`, and a bare Decision nam
 
 ```json
 [
-    {"subject": {"item": "Headphones", "amount_eur": 120, "explanation": "Arrived damaged."}, "expected": "approve"},
+    {"subject": {"item": "Headphones", "amount": 120, "explanation": "Arrived damaged."}, "expected": "approve"},
     {"subject": 42, "expected": "reject"}
 ]
 ```
@@ -583,7 +686,12 @@ They go to the default log channel. Set `JUDGMENT_LOG_CHANNEL` to send them else
 
 ## Testing
 
-The package ships two fakes. Both are strict: a test cannot pass by reading an answer nobody scripted.
+The package ships two fakes. Both are strict: a test cannot pass by reading an answer nobody scripted. No test needs a real Engine, and none should call one: its answers are not repeatable, so a test that depends on them would be flaky.
+
+| You are testing | Use | Engine | Database |
+| --- | --- | --- | --- |
+| A Decision: its thresholds and the order of its arms | `Assessment::fake()` | none | none |
+| Code that assesses or dispatches a Judgment and acts on the Outcome | `Judge::fake()` | blocked | not needed for the Assessments |
 
 ### Unit-testing a Decision with `Assessment::fake()`
 
@@ -594,10 +702,28 @@ use RobertoGallea\Judgment\Assessment;
 
 $assessment = Assessment::fake(new RefundAbuse($refund))
     ->likelihood('abusive', .80)
+    ->rating('credibility', 1)
     ->make();
 
 expect($assessment->outcome())->toBe(RefundOutcome::Reject);
 ```
+
+Write one test per arm of the Decision, each scripting answers that should reach that arm and no earlier one. A test named after the arm it covers reads as the Decision's specification, and it fails when someone reorders the arms:
+
+```php
+it('sends a frequent claimant to Review, whatever the Engine thinks of the claim', function () {
+    $refund = Refund::factory()->for(Customer::factory()->withRefundsThisYear(3))->create();
+
+    $assessment = Assessment::fake(new RefundAbuse($refund))
+        ->likelihood('abusive', .05)
+        ->rating('credibility', [0, 0, .3, .7])                           // expected level 2.7: credible
+        ->make();
+
+    expect($assessment->outcome())->toBe(RefundOutcome::Escalate);
+});
+```
+
+Script a Rating by its probability per level when the Decision reads `expected()`, so the test states the exact value the threshold is compared against.
 
 Every Question kind can be scripted:
 
@@ -628,7 +754,7 @@ Swap the Judge for a fake that answers each Judgment from a script:
 use RobertoGallea\Judgment\Facades\Judge;
 
 Judge::fake([
-    RefundAbuse::class => ['abusive' => .80],                                         // static answers
+    RefundAbuse::class => ['abusive' => .80, 'credibility' => 1],                     // static answers
     SupportTicket::class => fn (SupportTicket $judgment) => [                         // a closure given the Judgment
         'department' => $judgment->ticket->subject === 'Invoice' ? 'billing' : 'other',
     ],
@@ -636,7 +762,21 @@ Judge::fake([
 ]);
 ```
 
-Answers are written as in `answers()` above. A closure can also return an `Assessment::fake($judgment)` builder, or throw an `EngineFailed` to test failure handling: the fake then fires `AssessmentFailed` and throws or returns `Unassessed` as `judgment.failure` says.
+Answers are written as in `answers()` above. A feature test scripts the answers, exercises the application, and asserts on what the application did with the Outcome:
+
+```php
+it('rejects an abusive refund request', function () {
+    Judge::fake([RefundAbuse::class => ['abusive' => .80, 'credibility' => 1]]);
+    $refund = Refund::factory()->create();
+
+    $this->post(route('refunds.submit', $refund))->assertRedirect();
+
+    expect($refund->fresh()->status)->toBe('rejected');
+    Judge::assertAssessed(RefundAbuse::class, fn (RefundAbuse $judgment) => $judgment->refund->is($refund));
+});
+```
+
+A closure can also return an `Assessment::fake($judgment)` builder, or throw an `EngineFailed` to test failure handling: the fake then fires `AssessmentFailed` and throws or returns `Unassessed` as `judgment.failure` says.
 
 Assessing a Judgment with no script throws `UnscriptedJudgment`, and a sequence that runs out throws `ExhaustedSequence`. While the fake is active every Engine connection throws `RealEngineCallPrevented`, so no test reaches a real Engine. Assessments from the fake fire `AssessmentCompleted` and check every Decision for purity, like `Assessment::fake()`. They are not recorded, so a feature test needs no migration for them.
 
