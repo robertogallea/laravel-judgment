@@ -18,6 +18,13 @@ TYPESAFE_API_KEY=your-key
 
 To publish the config file: `php artisan vendor:publish --tag=judgment-config`. See [Engines](#engines) for the Jev options and for other Engines.
 
+Every Assessment is recorded in the database, so publish and run the migration:
+
+```bash
+php artisan vendor:publish --tag=judgment-migrations
+php artisan migrate
+```
+
 ## Declaring a Judgment
 
 A Judgment is constructed with its Subject, like a Mailable. It declares its Evidence explicitly, the Questions to ask, and optionally a default Decision.
@@ -267,6 +274,84 @@ use RobertoGallea\Judgment\EngineManager;
 app(EngineManager::class)->extend('classifier', fn ($app, array $config, string $connection) => new ClassifierEngine($config['url']));
 ```
 
+## Persisted Assessments
+
+Every Assessment is recorded as an `RobertoGallea\Judgment\Models\AssessmentRecord` in the `judgment_assessments` table, for audit, replay and Calibration. The Assessment itself stays an immutable value with no database behind it. A record stores:
+
+| Column | What |
+| --- | --- |
+| `judgment` | the Judgment class |
+| `subject_type`, `subject_id` | the Subject, polymorphic |
+| `evidence`, `evidence_fingerprint` | the Evidence as the Engine was asked (untrusted text as plain text), and its SHA-256 |
+| `untrusted_paths` | the dotted paths of the untrusted text, e.g. `["request.explanation"]` |
+| `language` | the Evidence language the Judgment declares |
+| `questions_fingerprint` | a SHA-256 of each Question's key, kind, instructions and criteria (labels, levels, meanings) |
+| `answers` | the probabilities, per Question |
+| `engine`, `model`, `request_id`, `provenance_details` | the Provenance |
+| `decision`, `decision_version`, `outcome` | the Decision last applied and its Outcome |
+
+The Subject is the only Eloquent model among the Judgment's public properties. If the Judgment has none, or more than one, no Subject is recorded. Override `subject()` to choose it. The language is not detected or translated. A Judgment declares it by overriding `language()`:
+
+```php
+public function language(): ?string
+{
+    return $this->refund->locale;
+}
+```
+
+The Decision, its version and its Outcome are written when you call `outcome()` or `decide()` on the Assessment that `assess()` returned. A Decision declares a version with a `version()` method. Bump it when you change the thresholds, so Calibration never mixes the two:
+
+```php
+final class RefundDecision implements Decision
+{
+    public function __invoke(Assessment $assessment, RefundAbuse $judgment): RefundOutcome { /* ... */ }
+
+    public function version(): string
+    {
+        return '2';
+    }
+}
+```
+
+Add `HasAssessments` to the Subject's model to reach its records:
+
+```php
+use RobertoGallea\Judgment\Concerns\HasAssessments;
+
+class Refund extends Model
+{
+    use HasAssessments;
+}
+
+$refund->assessments;                                // every record, of every Judgment
+$record = $refund->latestAssessment(RefundAbuse::class); // or null
+```
+
+A record rebuilds its Assessment, so you can apply another Decision to past answers:
+
+```php
+$assessment = $record->assessment();                  // constructs RefundAbuse with the recorded Subject
+$assessment = $record->assessment(new RefundAbuse($refund)); // or over a Judgment you construct
+
+$assessment->decide(new StrictRefundDecision());
+```
+
+A rebuilt Assessment is not linked to its record, so deciding it never overwrites the recorded Outcome. Rebuilding throws `UnrebuildableAssessment` in three cases: the record belongs to another Judgment, the Judgment's Questions have changed since it was recorded (the fingerprints differ), or there is no Subject to construct the Judgment with.
+
+Persistence is configured under `judgment.persistence`:
+
+| Key | Env | Default | |
+| --- | --- | --- | --- |
+| `enabled` | `JUDGMENT_PERSIST` | `true` | record Assessments at all |
+| `evidence` | `JUDGMENT_PERSIST_EVIDENCE` | `true` | `false` stores only the Evidence fingerprint and untrusted paths, e.g. when the Evidence holds personal data |
+| `retention_days` | `JUDGMENT_RETENTION_DAYS` | `365` | records older than this are pruned; `null` keeps them forever |
+
+Pruning uses Laravel's `model:prune`. The package's model is not in `app/Models`, so name it when you schedule the command:
+
+```php
+Schedule::command('model:prune', ['--model' => [AssessmentRecord::class]])->daily();
+```
+
 ## Events and logging
 
 Every assessment fires an event:
@@ -341,7 +426,7 @@ Judge::fake([
 
 Answers are written as in `answers()` above. A closure can also return an `Assessment::fake($judgment)` builder, or throw an `EngineFailed` to test failure handling: the fake then fires `AssessmentFailed` and throws or returns `Unassessed` as `judgment.failure` says.
 
-Assessing a Judgment with no script throws `UnscriptedJudgment`, and a sequence that runs out throws `ExhaustedSequence`. While the fake is active every Engine connection throws `RealEngineCallPrevented`, so no test reaches a real Engine. Assessments from the fake fire `AssessmentCompleted` and check every Decision for purity, like `Assessment::fake()`.
+Assessing a Judgment with no script throws `UnscriptedJudgment`, and a sequence that runs out throws `ExhaustedSequence`. While the fake is active every Engine connection throws `RealEngineCallPrevented`, so no test reaches a real Engine. Assessments from the fake fire `AssessmentCompleted` and check every Decision for purity, like `Assessment::fake()`. They are not recorded, so a feature test needs no migration for them.
 
 Assert what was assessed:
 

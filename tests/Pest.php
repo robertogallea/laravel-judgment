@@ -5,6 +5,8 @@ use RobertoGallea\Judgment\Contracts\Engine;
 use RobertoGallea\Judgment\Tests\Fixtures\FakeEngine;
 use RobertoGallea\Judgment\Tests\Fixtures\Refund;
 use RobertoGallea\Judgment\Tests\Fixtures\RefundAbuse;
+use RobertoGallea\Judgment\Tests\Fixtures\ReturnAbuse;
+use RobertoGallea\Judgment\Tests\Fixtures\ReturnRequest;
 use RobertoGallea\Judgment\Tests\Fixtures\SupportTicket;
 use RobertoGallea\Judgment\Tests\Fixtures\Ticket;
 use RobertoGallea\Judgment\Tests\TestCase;
@@ -26,6 +28,17 @@ function assessTicket(array $answers = []): Assessment
     ]));
 
     return (new SupportTicket(new Ticket('Doppio addebito', 'Mi avete addebitato due volte.')))->assess();
+}
+
+/** A ReturnAbuse over a newly stored ReturnRequest, answered by a FakeEngine (abusive: .42, department: billing). */
+function returnAbuse(string $reason = 'The zip broke on the first day.'): ReturnAbuse
+{
+    app()->instance(Engine::class, new FakeEngine([
+        'abusive' => .42,
+        'department' => ['billing' => .70, 'technical' => .20, 'other' => .10],
+    ]));
+
+    return new ReturnAbuse(ReturnRequest::create(['item' => 'Jacket', 'reason' => $reason]));
 }
 
 function refundAbuse(): RefundAbuse

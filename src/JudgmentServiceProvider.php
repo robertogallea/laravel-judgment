@@ -9,6 +9,7 @@ use RobertoGallea\Judgment\Console\MakeJudgmentCommand;
 use RobertoGallea\Judgment\Contracts\Engine;
 use RobertoGallea\Judgment\Contracts\Judge as JudgeContract;
 use RobertoGallea\Judgment\Engines\JevEngine;
+use RobertoGallea\Judgment\Support\AssessmentRecorder;
 
 class JudgmentServiceProvider extends ServiceProvider
 {
@@ -20,6 +21,7 @@ class JudgmentServiceProvider extends ServiceProvider
             ->extend('jev', JevEngine::connect(...)));
         $this->app->bind(Engine::class, fn (Application $app): Engine => $app->make(EngineManager::class)->engine());
 
+        $this->app->singleton(AssessmentRecorder::class);
         $this->app->singleton(JudgeContract::class, fn (Application $app) => new Judge($app));
     }
 
@@ -29,6 +31,10 @@ class JudgmentServiceProvider extends ServiceProvider
             $this->publishes([
                 __DIR__.'/../config/judgment.php' => config_path('judgment.php'),
             ], 'judgment-config');
+
+            $this->publishesMigrations([
+                __DIR__.'/../database/migrations' => database_path('migrations'),
+            ], 'judgment-migrations');
 
             $this->commands([MakeJudgmentCommand::class, MakeDecisionCommand::class]);
         }

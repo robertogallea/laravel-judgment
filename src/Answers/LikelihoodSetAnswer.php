@@ -25,6 +25,12 @@ final class LikelihoodSetAnswer implements Answer
             ?? throw UndeclaredLabel::for($key, array_map(strval(...), array_keys($this->likelihoods)), 'Likelihood Set');
     }
 
+    /** @return non-empty-array<string, LikelihoodAnswer> label => answer */
+    public function likelihoods(): array
+    {
+        return $this->likelihoods;
+    }
+
     /** The highest Likelihood in the set, for "any label at all" thresholds. */
     public function max(): LikelihoodAnswer
     {
