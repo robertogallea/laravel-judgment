@@ -9,12 +9,14 @@ use Illuminate\Foundation\Bus\PendingDispatch;
 use PHPUnit\Framework\Assert as PHPUnit;
 use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Contracts\Judge;
+use RobertoGallea\Judgment\Contracts\Outcome;
 use RobertoGallea\Judgment\Events\AssessmentCompleted;
 use RobertoGallea\Judgment\Events\AssessmentFailed;
 use RobertoGallea\Judgment\Exceptions\EngineFailed;
 use RobertoGallea\Judgment\Exceptions\UnscriptedJudgment;
 use RobertoGallea\Judgment\Jobs\AssessJudgment;
 use RobertoGallea\Judgment\Judgment;
+use RobertoGallea\Judgment\Support\AssessmentRecorder;
 use RobertoGallea\Judgment\Unassessed;
 
 /**
@@ -35,6 +37,9 @@ final class JudgeFake implements Judge
     /** @var list<Judgment> */
     private array $dispatched = [];
 
+    /** @var list<Assessment> */
+    private array $assessments = [];
+
     public function assess(Judgment $judgment): Assessment|Unassessed
     {
         $this->assessed[] = $judgment;
@@ -45,6 +50,8 @@ final class JudgeFake implements Judge
             return $this->fail($judgment, $e);
         }
 
+        // Linked like the Judge's, unrecorded, so deciding it can start Review.
+        $this->assessments[] = $this->container->make(AssessmentRecorder::class)->link($assessment, null);
         $this->container->make(Dispatcher::class)->dispatch(new AssessmentCompleted($judgment, $assessment));
 
         return $assessment;
@@ -134,6 +141,34 @@ final class JudgeFake implements Judge
             count($matching),
             count($matching) === 1 ? 'time' : 'times',
         ));
+    }
+
+    /**
+     * Assert a Decision applied to an Assessment of the Judgment yielded an Outcome requiring
+     * Review, at least once matching the callback if given.
+     *
+     * @param  class-string<Judgment>  $judgment
+     * @param  (Closure(Judgment, Outcome): bool)|null  $callback
+     */
+    public function assertAwaitingReview(string $judgment, ?Closure $callback = null): void
+    {
+        $recorder = $this->container->make(AssessmentRecorder::class);
+
+        $awaiting = [];
+        foreach ($this->assessments as $assessment) {
+            $outcome = $recorder->awaitingReview($assessment);
+            if ($outcome !== null && $assessment->judgment instanceof $judgment) {
+                $awaiting[] = [$assessment->judgment, $outcome];
+            }
+        }
+        PHPUnit::assertNotEmpty($awaiting, "Expected {$judgment} to await Review, but it did not.");
+
+        if ($callback !== null) {
+            PHPUnit::assertNotEmpty(
+                array_filter($awaiting, fn (array $review) => $callback(...$review)),
+                sprintf('Expected %s to await Review matching the callback, but none of the %d awaiting Review matched.', $judgment, count($awaiting)),
+            );
+        }
     }
 
     public function assertNothingAssessed(): void

@@ -3,6 +3,7 @@
 namespace RobertoGallea\Judgment\Support;
 
 use Illuminate\Contracts\Config\Repository as Config;
+use Illuminate\Contracts\Events\Dispatcher;
 use LogicException;
 use RobertoGallea\Judgment\Answers\Answer;
 use RobertoGallea\Judgment\Answers\ClassificationAnswer;
@@ -12,6 +13,7 @@ use RobertoGallea\Judgment\Answers\RatingAnswer;
 use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Contracts\Decision;
 use RobertoGallea\Judgment\Contracts\Outcome;
+use RobertoGallea\Judgment\Events\AssessmentAwaitingReview;
 use RobertoGallea\Judgment\Exceptions\UnrebuildableAssessment;
 use RobertoGallea\Judgment\Judgment;
 use RobertoGallea\Judgment\Models\AssessmentRecord;
@@ -31,12 +33,21 @@ use WeakMap;
  */
 final class AssessmentRecorder
 {
-    /** @var WeakMap<Assessment, AssessmentRecord> each recorded Assessment's record, held weakly so both can still be freed */
+    /**
+     * Each Assessment a Judge produced, with its record, or false when it was not recorded;
+     * held weakly so both can still be freed. Deciding one of these records its Outcome and may start Review.
+     *
+     * @var WeakMap<Assessment, AssessmentRecord|false>
+     */
     private WeakMap $records;
 
-    public function __construct(private readonly Config $config)
+    /** @var WeakMap<Assessment, Outcome> each of the Judge's Assessments that entered Review, with the Outcome that required it */
+    private WeakMap $awaiting;
+
+    public function __construct(private readonly Config $config, private readonly Dispatcher $events)
     {
         $this->records = new WeakMap;
+        $this->awaiting = new WeakMap;
     }
 
     /**
@@ -48,6 +59,8 @@ final class AssessmentRecorder
     public function record(Assessment $assessment, array $questions, array $answers, array $evidence): ?AssessmentRecord
     {
         if (! $this->config->get('judgment.persistence.enabled')) {
+            $this->link($assessment, null);
+
             return null;
         }
 
@@ -77,26 +90,67 @@ final class AssessmentRecorder
         return $this->records[$assessment] = $record;
     }
 
-    /** Link an Assessment rebuilt from its record, so deciding it records the Outcome there. */
-    public function link(Assessment $assessment, AssessmentRecord $record): Assessment
+    /**
+     * Link an Assessment rebuilt from its record, so deciding it records the Outcome there,
+     * or one a Judge produced without recording it, so deciding it can still announce Review.
+     */
+    public function link(Assessment $assessment, ?AssessmentRecord $record): Assessment
     {
-        $this->records[$assessment] = $record;
+        $this->records[$assessment] = $record ?? false;
 
         return $assessment;
     }
 
-    /** Store the Decision last applied to a recorded Assessment, its version if it declares one, and its Outcome. */
+    /**
+     * Store the Decision last applied to a Judge's Assessment, its version if it declares one,
+     * and its Outcome; an Outcome requiring Review puts the record in Review, announced once.
+     * From then on the record keeps that Outcome, for the reviewer to resolve.
+     */
     public function decided(Assessment $assessment, Decision $decision, Outcome $outcome): void
     {
         if (! isset($this->records[$assessment])) {
             return;
         }
 
-        $this->records[$assessment]->update([
+        $record = $this->records[$assessment] ?: null;
+        $entersReview = $outcome->requiresReview() && ! isset($this->awaiting[$assessment]);
+        if ($record !== null) {
+            $entersReview = $this->write($record, $decision, $outcome, $entersReview);
+        }
+        if (! $entersReview) {
+            return;
+        }
+
+        $this->awaiting[$assessment] = $outcome;
+        $this->events->dispatch(new AssessmentAwaitingReview(
+            $assessment->judgment, $assessment, $outcome, $record, $record->review_requested_at ?? now()->toImmutable(),
+        ));
+    }
+
+    /** The Outcome that put one of the Judge's Assessments in Review, if a Decision applied here did. */
+    public function awaitingReview(Assessment $assessment): ?Outcome
+    {
+        return $this->awaiting[$assessment] ?? null;
+    }
+
+    /**
+     * Write the Decision to a record not in Review, in one conditional update so that of two
+     * copies of a record decided at once only one puts it in Review.
+     *
+     * @return bool whether the record entered Review
+     */
+    private function write(AssessmentRecord $record, Decision $decision, Outcome $outcome, bool $review): bool
+    {
+        $written = AssessmentRecord::query()->whereKey($record->getKey())->whereNull('review_requested_at')->update([
             'decision' => $decision::class,
             'decision_version' => method_exists($decision, 'version') ? (string) $decision->version() : null,
+            'outcome_type' => $outcome::class,
             'outcome' => (string) $outcome->value,
+            ...$review ? ['review_requested_at' => now()->toImmutable()] : [],
         ]);
+        $record->refresh();
+
+        return $review && $written === 1;
     }
 
     /**

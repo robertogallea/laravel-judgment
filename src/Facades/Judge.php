@@ -18,6 +18,7 @@ use RobertoGallea\Judgment\Testing\PreventedEngine;
  * @method static void assertAssessed(class-string<\RobertoGallea\Judgment\Judgment> $judgment, (\Closure(\RobertoGallea\Judgment\Judgment): bool)|null $callback = null)
  * @method static void assertNotAssessed(class-string<\RobertoGallea\Judgment\Judgment> $judgment, (\Closure(\RobertoGallea\Judgment\Judgment): bool)|null $callback = null)
  * @method static void assertNothingAssessed()
+ * @method static void assertAwaitingReview(class-string<\RobertoGallea\Judgment\Judgment> $judgment, (\Closure(\RobertoGallea\Judgment\Judgment, \RobertoGallea\Judgment\Contracts\Outcome): bool)|null $callback = null)
  * @method static void assertDispatched(class-string<\RobertoGallea\Judgment\Judgment> $judgment, (\Closure(\RobertoGallea\Judgment\Judgment): bool)|null $callback = null)
  * @method static void assertNotDispatched(class-string<\RobertoGallea\Judgment\Judgment> $judgment, (\Closure(\RobertoGallea\Judgment\Judgment): bool)|null $callback = null)
  *

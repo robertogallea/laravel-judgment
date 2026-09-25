@@ -288,7 +288,9 @@ Every Assessment is recorded as an `RobertoGallea\Judgment\Models\AssessmentReco
 | `questions_fingerprint` | a SHA-256 of each Question's key, kind, instructions and criteria (labels, levels, meanings) |
 | `answers` | the probabilities, per Question |
 | `engine`, `model`, `request_id`, `provenance_details` | the Provenance |
-| `decision`, `decision_version`, `outcome` | the Decision last applied and its Outcome |
+| `decision`, `decision_version`, `outcome_type`, `outcome` | the Decision last applied, and its Outcome's enum and value |
+| `review_requested_at` | when an Outcome requiring Review put the record in Review |
+| `resolution`, `resolver_type`, `resolver_id`, `resolved_at` | the reviewer's Resolution, who recorded it, and when |
 
 The Subject is the only Eloquent model among the Judgment's public instance properties. If the Judgment has none, or more than one, or the model is not saved yet, no Subject is recorded. Override `subject()` to choose it. The language is not detected or translated. A Judgment declares it by overriding `language()`:
 
@@ -402,12 +404,94 @@ Which call records the Outcome:
 
 Like `assessment()`, the record's `outcome()` and `decide()` take an optional Judgment to rebuild over.
 
+## Review and Resolution
+
+An Outcome whose `requiresReview()` returns true needs a person to decide before its Action is taken:
+
+```php
+enum RefundOutcome: string implements Outcome
+{
+    case Approve = 'approve';
+    case Escalate = 'escalate';
+    case Reject = 'reject';
+
+    public function requiresReview(): bool
+    {
+        return $this === self::Escalate;
+    }
+}
+```
+
+When a recorded Decision yields such an Outcome (through `outcome()` or `decide()`, as in the table above), the record enters Review and `AssessmentAwaitingReview` fires. A record enters Review once, even when two copies of it are decided at the same moment. From then on it keeps the Outcome and Decision that sent it to Review: deciding it again records nothing and fires no event. A what-if on a rebuilt Assessment never starts Review. The package ships no review UI: notify reviewers from the event.
+
+```php
+use RobertoGallea\Judgment\Events\AssessmentAwaitingReview;
+
+final class NotifyReviewers implements ShouldQueue
+{
+    public function handle(AssessmentAwaitingReview $event): void
+    {
+        if ($event->record === null) {
+            return; // persistence is off: nothing to resolve
+        }
+
+        Notification::send(User::reviewers()->get(), new RefundNeedsReview($event->record, $event->outcome, $event->requestedAt));
+    }
+}
+```
+
+The event carries `$judgment`, `$assessment`, `$outcome`, `$record` and `$requestedAt`. `$record` is null when persistence is off or under `Judge::fake()`, and a record is needed to resolve. Find the records awaiting Review with the `awaitingReview` scope:
+
+```php
+AssessmentRecord::awaitingReview()->where('judgment', RefundAbuse::class)->oldest('review_requested_at')->get();
+$record->isAwaitingReview();
+```
+
+A reviewer records the Resolution, a case of the same Outcome enum, which may overturn the automatic Outcome:
+
+```php
+$record->resolve(RefundOutcome::Approve, $request->user());
+```
+
+Who may resolve is up to your application, through the `resolve` ability of an ordinary Policy on `AssessmentRecord`. Until you define one, every reviewer is refused with an `AuthorizationException`:
+
+```php
+use RobertoGallea\Judgment\Models\AssessmentRecord;
+
+final class AssessmentRecordPolicy
+{
+    public function resolve(User $user, AssessmentRecord $record): bool
+    {
+        return $user->can_review && $record->judgment === RefundAbuse::class;
+    }
+}
+
+Gate::policy(AssessmentRecord::class, AssessmentRecordPolicy::class); // e.g. in AppServiceProvider::boot()
+```
+
+`resolve()` throws `InvalidResolution` if the record is not awaiting Review or is already resolved, or if the Resolution is a case of another enum or itself requires Review. It checks and records in a single conditional update, so when two reviewers resolve the same record at once, only the first is recorded. The record keeps both Outcomes: `outcome` for the automatic one, `resolution` and `resolver` for the person's.
+
+Once recorded, `AssessmentResolved` fires with `$record`, `$outcome` (the automatic Outcome), `$resolution` and `$reviewer`. Perform the Action for the Resolution there:
+
+```php
+public function handle(AssessmentResolved $event): void
+{
+    match ($event->resolution) {
+        RefundOutcome::Approve => $this->refunds->approve($event->record->subject),
+        RefundOutcome::Reject => $this->refunds->reject($event->record->subject),
+        RefundOutcome::Escalate => null,
+    };
+}
+```
+
 ## Events and logging
 
 Every assessment fires an event:
 
 - `RobertoGallea\Judgment\Events\AssessmentCompleted`, with `$judgment`, `$assessment` and `$record` (the `AssessmentRecord`, or null when persistence is off or under `Judge::fake()`)
 - `RobertoGallea\Judgment\Events\AssessmentFailed`, with `$judgment` and `$exception`, in both failure modes
+
+The Review lifecycle fires two more: `AssessmentAwaitingReview` and `AssessmentResolved` (see [Review and Resolution](#review-and-resolution)).
 
 The package also writes log entries you can trace an assessment by:
 
@@ -486,6 +570,15 @@ Judge::assertAssessed(RefundAbuse::class, fn (RefundAbuse $judgment) => $judgmen
 Judge::assertNotAssessed(ProductReview::class);
 Judge::assertNothingAssessed();
 ```
+
+Assert that a Decision applied to a faked Assessment sent it to Review. The callback receives the Judgment and the Outcome:
+
+```php
+Judge::assertAwaitingReview(RefundAbuse::class);
+Judge::assertAwaitingReview(RefundAbuse::class, fn (RefundAbuse $judgment, RefundOutcome $outcome) => $outcome === RefundOutcome::Escalate);
+```
+
+A faked Assessment is not recorded, so it cannot be resolved. `AssessmentAwaitingReview` still fires, with a null `$record`. A Decision unit test on `Assessment::fake()` never enters Review.
 
 The fake dispatches Judgments through the queue like the Judge. On the sync queue the job runs and the fake answers from its script. Under `Queue::fake()` nothing runs. Either way you can assert what was dispatched:
 
