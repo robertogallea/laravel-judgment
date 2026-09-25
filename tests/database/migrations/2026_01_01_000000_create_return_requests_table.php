@@ -12,6 +12,7 @@ return new class extends Migration
             $table->id();
             $table->string('item');
             $table->text('reason');
+            $table->string('language')->nullable();
             $table->timestamps();
         });
     }

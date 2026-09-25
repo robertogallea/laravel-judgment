@@ -4,6 +4,7 @@ namespace RobertoGallea\Judgment;
 
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
+use RobertoGallea\Judgment\Console\CalibrateCommand;
 use RobertoGallea\Judgment\Console\MakeDecisionCommand;
 use RobertoGallea\Judgment\Console\MakeJudgmentCommand;
 use RobertoGallea\Judgment\Contracts\Engine;
@@ -36,7 +37,7 @@ class JudgmentServiceProvider extends ServiceProvider
                 __DIR__.'/../database/migrations' => database_path('migrations'),
             ], 'judgment-migrations');
 
-            $this->commands([MakeJudgmentCommand::class, MakeDecisionCommand::class]);
+            $this->commands([MakeJudgmentCommand::class, MakeDecisionCommand::class, CalibrateCommand::class]);
         }
     }
 }

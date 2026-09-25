@@ -143,7 +143,7 @@ final class AssessmentRecorder
     {
         $written = AssessmentRecord::query()->whereKey($record->getKey())->whereNull('review_requested_at')->update([
             'decision' => $decision::class,
-            'decision_version' => method_exists($decision, 'version') ? (string) $decision->version() : null,
+            'decision_version' => self::decisionVersion($decision),
             'outcome_type' => $outcome::class,
             'outcome' => (string) $outcome->value,
             ...$review ? ['review_requested_at' => now()->toImmutable()] : [],
@@ -151,6 +151,12 @@ final class AssessmentRecorder
         $record->refresh();
 
         return $review && $written === 1;
+    }
+
+    /** The version a Decision declares through a version() method, if any: bumped when its thresholds change. */
+    public static function decisionVersion(Decision $decision): ?string
+    {
+        return method_exists($decision, 'version') ? (string) $decision->version() : null;
     }
 
     /**

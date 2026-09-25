@@ -8,6 +8,7 @@ use RobertoGallea\Judgment\Concerns\HasAssessments;
 /**
  * @property string $item
  * @property string $reason
+ * @property ?string $language
  */
 final class ReturnRequest extends Model
 {

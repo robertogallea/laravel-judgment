@@ -65,6 +65,33 @@ class Judge implements JudgeContract
     }
 
     /**
+     * Ask the Engine the Judgment's Questions over the Evidence given, without caching, recording,
+     * logging or announcing the Assessment, for Calibration.
+     *
+     * @internal
+     *
+     * @param  array<string, mixed>  $evidence
+     *
+     * @throws EngineFailed when the Engine fails
+     */
+    public function ask(Judgment $judgment, Engine $engine, array $evidence): Assessment
+    {
+        $questions = $judgment->questions();
+        $request = new EngineRequest($this->expand($judgment, $questions), $evidence);
+
+        try {
+            $response = $engine->answer($request);
+            $this->ensureEveryQuestionIsAnswered($judgment, $request, $response);
+        } catch (EngineFailed $e) {
+            throw $e;
+        } catch (Exception $e) {
+            throw EngineFailed::for($judgment, $e);
+        }
+
+        return new Assessment($judgment, $questions, $this->regroup($questions, $response->answers), $response->provenance);
+    }
+
+    /**
      * Record the Assessment and announce it.
      *
      * @param  array<string, Question|LikelihoodSet>  $questions
