@@ -5,6 +5,7 @@ namespace RobertoGallea\Judgment;
 use Exception;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Foundation\Bus\PendingDispatch;
 use RobertoGallea\Judgment\Answers\Answer;
 use RobertoGallea\Judgment\Answers\LikelihoodAnswer;
 use RobertoGallea\Judgment\Contracts\Engine;
@@ -14,6 +15,7 @@ use RobertoGallea\Judgment\Events\AssessmentFailed;
 use RobertoGallea\Judgment\Exceptions\EngineFailed;
 use RobertoGallea\Judgment\Exceptions\InvalidQuestion;
 use RobertoGallea\Judgment\Exceptions\MalformedEngineResponse;
+use RobertoGallea\Judgment\Jobs\AssessJudgment;
 use RobertoGallea\Judgment\Questions\LikelihoodSet;
 use RobertoGallea\Judgment\Questions\Question;
 use RobertoGallea\Judgment\Support\AssessmentRecorder;
@@ -44,12 +46,17 @@ class Judge implements JudgeContract
 
         $answers = $this->regroup($questions, $response->answers);
         $assessment = new Assessment($judgment, $questions, $answers, $response->provenance);
-        $this->container->make(AssessmentRecorder::class)->record($assessment, $questions, $answers, $request->evidence);
+        $record = $this->container->make(AssessmentRecorder::class)->record($assessment, $questions, $answers, $request->evidence);
 
-        $this->container->make(Dispatcher::class)->dispatch(new AssessmentCompleted($judgment, $assessment));
+        $this->container->make(Dispatcher::class)->dispatch(new AssessmentCompleted($judgment, $assessment, $record));
         $this->container->make(JudgmentLog::class)->assessed($assessment);
 
         return $assessment;
+    }
+
+    public function dispatch(Judgment $judgment): PendingDispatch
+    {
+        return AssessJudgment::dispatch($judgment);
     }
 
     /** Announce and log the failure, then throw it or end Unassessed, as configured. */

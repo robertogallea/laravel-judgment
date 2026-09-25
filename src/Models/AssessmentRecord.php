@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Contracts\Decision;
+use RobertoGallea\Judgment\Contracts\Outcome;
 use RobertoGallea\Judgment\Exceptions\UnrebuildableAssessment;
 use RobertoGallea\Judgment\Judgment;
 use RobertoGallea\Judgment\Support\AssessmentRecorder;
@@ -55,6 +56,21 @@ class AssessmentRecord extends Model
     }
 
     /**
+     * Apply the Judgment's default Decision to the recorded Assessment and record
+     * its Outcome: how a queued listener, holding only a copy, records one.
+     */
+    public function outcome(?Judgment $judgment = null): Outcome
+    {
+        return $this->linked($judgment)->outcome();
+    }
+
+    /** Apply the given Decision to the recorded Assessment and record its Outcome. */
+    public function decide(Decision $decision, ?Judgment $judgment = null): Outcome
+    {
+        return $this->linked($judgment)->decide($decision);
+    }
+
+    /**
      * Records older than judgment.persistence.retention_days, removed by model:prune; none when it is null.
      *
      * @return Builder<static>
@@ -72,6 +88,12 @@ class AssessmentRecord extends Model
     public function subject(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    /** The rebuilt Assessment, linked for a single decision so a what-if never records. */
+    private function linked(?Judgment $judgment): Assessment
+    {
+        return app(AssessmentRecorder::class)->link($this->assessment($judgment), $this);
     }
 
     protected function casts(): array

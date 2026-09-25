@@ -77,6 +77,14 @@ final class AssessmentRecorder
         return $this->records[$assessment] = $record;
     }
 
+    /** Link an Assessment rebuilt from its record, so deciding it records the Outcome there. */
+    public function link(Assessment $assessment, AssessmentRecord $record): Assessment
+    {
+        $this->records[$assessment] = $record;
+
+        return $assessment;
+    }
+
     /** Store the Decision last applied to a recorded Assessment, its version if it declares one, and its Outcome. */
     public function decided(Assessment $assessment, Decision $decision, Outcome $outcome): void
     {
