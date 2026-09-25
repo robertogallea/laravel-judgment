@@ -6,6 +6,7 @@ use Illuminate\Contracts\Container\Container;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Http\Client\Factory as Http;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Sleep;
 use LogicException;
 use RobertoGallea\Judgment\Answers\Answer;
@@ -64,7 +65,11 @@ final class JevEngine implements Engine
             throw EngineNotConfigured::missingKey($connection);
         }
 
-        $model = (string) $config['model'];
+        $model = $config['model'] ?? null;
+        if (! is_string($model) || $model === '') {
+            throw EngineNotConfigured::missingModel($connection);
+        }
+
         if (! preg_match(self::PINNED, $model) && ! ($config['allow_aliases'] ?? false)) {
             if ($container->make(Application::class)->environment('production')) {
                 throw UnpinnedModel::for($model);
@@ -142,16 +147,20 @@ final class JevEngine implements Engine
         return $response;
     }
 
-    /** Milliseconds to wait: as long as Jev asks, else doubling from half a second; never over a minute. */
+    /** Milliseconds to wait: as long as Jev asks, in milliseconds, seconds or as a date, else doubling from half a second; never over a minute. */
     private function backoff(Response $response, int $retry): int
     {
+        $afterMs = $response->header('retry-after-ms');
+        $after = $response->header('retry-after');
+
         $asked = match (true) {
-            is_numeric($response->header('retry-after-ms')) => (float) $response->header('retry-after-ms'),
-            is_numeric($response->header('retry-after')) => (float) $response->header('retry-after') * 1000,
+            is_numeric($afterMs) => (float) $afterMs,
+            is_numeric($after) => (float) $after * 1000,
+            strtotime($after) !== false => (strtotime($after) - Date::now()->getTimestamp()) * 1000,
             default => 500 * 2 ** ($retry - 1),
         };
 
-        return (int) min($asked, self::MAX_BACKOFF_MS);
+        return (int) max(0, min($asked, self::MAX_BACKOFF_MS));
     }
 
     private function ensureSuccessful(Response $response): void
@@ -229,9 +238,9 @@ final class JevEngine implements Engine
         return array_filter($asked, fn (mixed $value) => $value !== null);
     }
 
-    /** @param  array<string, mixed>  $answer */
     /**
-     * The answer in package terms, or null when it is not the kind asked or lacks its probabilities.
+     * The answer in package terms, or null when it is not the kind asked, lacks its probabilities, or
+     * does not cover exactly the declared labels or levels.
      *
      * @param  array<array-key, mixed>  $answer
      */
@@ -250,11 +259,20 @@ final class JevEngine implements Engine
             return null;
         }
 
-        return match (true) {
-            $question instanceof Classification => $question->answer(array_combine(array_map(strval(...), array_keys($probabilities)), $probabilities)),
-            $question instanceof Rating => $question->answer($this->inLevelOrder($probabilities)),
-            default => null,
-        };
+        if ($question instanceof Classification) {
+            $probabilities = array_combine(array_map(strval(...), array_keys($probabilities)), $probabilities);
+            $labels = array_map(strval(...), array_keys($question->criteria()));
+
+            return array_diff($labels, array_keys($probabilities)) === [] && array_diff(array_keys($probabilities), $labels) === []
+                ? $question->answer($probabilities)
+                : null;
+        }
+
+        if ($question instanceof Rating) {
+            return count($probabilities) === count($question->criteria()) ? $question->answer($this->inLevelOrder($probabilities)) : null;
+        }
+
+        return null;
     }
 
     /** @return non-empty-array<array-key, float>|null */

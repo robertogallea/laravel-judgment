@@ -381,3 +381,34 @@ it('asks Jev by default, on the pinned model and base URL the shipped config dec
     Http::assertSent(fn (Request $request) => $request->url() === 'https://api.typesafe.ai/v1/systemone'
         && json_decode($request->body(), true)['model'] === 'jev-1.13.0');
 });
+
+it('fails on a Choice among labels the Classification does not declare', function () {
+    jevResponds([...ticketAnswers(), 'department' => ['type' => 'choice', 'choice' => 'sales', 'probabilities' => ['sales' => 0.9, 'billing' => 0.1]]]);
+
+    expect(fn () => assessTicketOnJev())->toThrow(MalformedEngineResponse::class, 'The Engine answered Question "department" unreadably');
+});
+
+it('fails on a Score over another number of levels than the Rating declares', function () {
+    jevResponds([...ticketAnswers(), 'severity' => ['type' => 'score', 'score' => 0.5, 'probabilities' => [0.5, 0.5]]]);
+
+    expect(fn () => assessTicketOnJev())->toThrow(MalformedEngineResponse::class, 'The Engine answered Question "severity" unreadably');
+});
+
+it('waits until the date Jev gives in retry-after', function () {
+    Sleep::fake();
+    Carbon\Carbon::setTestNow('2026-09-25 10:00:00');
+    Http::fake(['jev.test/*' => Http::sequence()
+        ->push(null, 429, ['retry-after' => 'Fri, 25 Sep 2026 10:00:05 GMT'])
+        ->push(null, 429, ['retry-after' => '-3'])
+        ->pushResponse(jevAbusiveResponse())]);
+
+    refundAbuse()->assess();
+
+    Sleep::assertSequence([Sleep::for(5000)->milliseconds(), Sleep::for(0)->milliseconds()]);
+});
+
+it('explains a missing model', function () {
+    config(['judgment.engines.jev.model' => null]);
+
+    refundAbuse()->assess();
+})->throws(EngineNotConfigured::class, 'The Judgment Engine connection "jev" has no model. Set an exact version such as "jev-1.13.0" in judgment.engines.jev.model.');

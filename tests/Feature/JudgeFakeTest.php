@@ -3,6 +3,7 @@
 use PHPUnit\Framework\AssertionFailedError;
 use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Contracts\Engine;
+use RobertoGallea\Judgment\EngineManager;
 use RobertoGallea\Judgment\EngineRequest;
 use RobertoGallea\Judgment\Exceptions\EngineFailed;
 use RobertoGallea\Judgment\Exceptions\ExhaustedSequence;
@@ -143,3 +144,10 @@ it('asserts nothing was assessed', function () {
 
     expect(fn () => Judge::assertNothingAssessed())->toThrow(AssertionFailedError::class, 'Expected nothing to be assessed, but 1 Judgment was: '.RefundAbuse::class.'.');
 });
+
+it('prevents real Engine calls on named connections while the Judge is faked', function () {
+    config(['judgment.engines.constant' => ['driver' => ConstantEngine::class]]);
+    Judge::fake();
+
+    app(EngineManager::class)->engine('constant')->answer(new EngineRequest([], []));
+})->throws(RealEngineCallPrevented::class, 'The Judge is faked, so real Engine calls are prevented.');

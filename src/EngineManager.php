@@ -20,14 +20,26 @@ class EngineManager
     /** @var array<string, Closure(Container, array<string, mixed>, string): Engine> */
     private array $drivers = [];
 
+    private ?Engine $prevented = null;
+
     public function __construct(private readonly Container $container) {}
+
+    /**
+     * Answer every connection with the given Engine from now on, so no real Engine is reached.
+     *
+     * @internal used by Judge::fake()
+     */
+    public function prevent(Engine $engine): void
+    {
+        $this->prevented = $engine;
+    }
 
     /** The Engine of the named connection, or of the default connection when none is named. */
     public function engine(?string $connection = null): Engine
     {
         $connection ??= $this->container->make('config')->get('judgment.engine') ?? throw EngineNotConfigured::noDefault();
 
-        return $this->engines[$connection] ??= $this->build($connection);
+        return $this->prevented ?? $this->engines[$connection] ??= $this->build($connection);
     }
 
     /**
