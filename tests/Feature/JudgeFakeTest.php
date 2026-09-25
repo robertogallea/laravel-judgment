@@ -55,7 +55,7 @@ it('answers a Judgment from a closure script, given the Judgment', function () {
 });
 
 it('fails the Judgment as the Judge would when a closure script throws an Engine failure', function () {
-    config(['judgment.failure' => 'unassessed']);
+    config(['judgment.throw_on_failure' => false]);
     Judge::fake([
         RefundAbuse::class => fn (RefundAbuse $judgment) => throw EngineFailed::for($judgment, new RuntimeException('Timed out')),
     ]);

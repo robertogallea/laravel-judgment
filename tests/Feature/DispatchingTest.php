@@ -35,7 +35,7 @@ it('fires AssessmentFailed when the Engine fails a dispatched Judgment, and fail
 });
 
 it('completes the job Unassessed when configured to', function () {
-    config(['judgment.failure' => 'unassessed']);
+    config(['judgment.throw_on_failure' => false]);
     Event::fake([AssessmentFailed::class]);
     $judgment = returnAbuse();
     app()->instance(Engine::class, new FailingEngine);

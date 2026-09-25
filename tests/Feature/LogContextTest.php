@@ -43,7 +43,7 @@ it('logs a cache hit apart from an Engine answer, pointing at the original recor
 });
 
 it('logs a failed Assessment with its Judgment and the failure', function () {
-    config(['judgment.failure' => 'unassessed']);
+    config(['judgment.throw_on_failure' => false]);
     app()->instance(Engine::class, new FailingEngine);
 
     $result = refundAbuse()->assess();
@@ -55,7 +55,7 @@ it('logs a failed Assessment with its Judgment and the failure', function () {
 });
 
 it('logs the model and engine request id of a malformed Engine response', function () {
-    config(['judgment.failure' => 'unassessed']);
+    config(['judgment.throw_on_failure' => false]);
     app()->instance(Engine::class, new FakeEngine([]));
 
     $result = refundAbuse()->assess();

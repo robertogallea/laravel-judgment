@@ -37,7 +37,7 @@ it('refuses an Assessment it cannot record, keeping its answers on the exception
 });
 
 it('refuses an unrecorded Assessment even when failures end Unassessed', function () {
-    config(['judgment.failure' => 'unassessed']);
+    config(['judgment.throw_on_failure' => false]);
     $judgment = returnAbuse();
     breakRecording();
 
