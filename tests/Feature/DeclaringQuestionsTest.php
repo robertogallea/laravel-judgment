@@ -100,3 +100,7 @@ it('refuses a Likelihood Set without labels', function () {
 it('refuses a Likelihood Set label whose question is blank', function () {
     Likelihood::each(['hate' => 'Does the post attack a protected group?', 'spam' => ' ']);
 })->throws(InvalidQuestion::class, 'A Question needs instructions: ask it as a complete question about the Evidence.');
+
+it('refuses a Likelihood Set label containing a dot, which would blur its dotted Engine key', function () {
+    Likelihood::each(['self.harm' => 'Does the post encourage self-harm?']);
+})->throws(InvalidQuestion::class, 'A Likelihood Set label cannot contain a dot; "self.harm" given.');

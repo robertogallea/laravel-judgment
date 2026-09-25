@@ -3,6 +3,7 @@
 namespace RobertoGallea\Judgment\Exceptions;
 
 use InvalidArgumentException;
+use RobertoGallea\Judgment\Judgment;
 
 /** A Question declared in a way no Engine could answer, caught where it is written. */
 final class InvalidQuestion extends InvalidArgumentException
@@ -45,5 +46,15 @@ final class InvalidQuestion extends InvalidArgumentException
     public static function noSetLabels(): self
     {
         return new self('A Likelihood Set needs at least 1 label; 0 given.');
+    }
+
+    public static function dottedSetLabel(string $label): self
+    {
+        return new self(sprintf('A Likelihood Set label cannot contain a dot; "%s" given.', $label));
+    }
+
+    public static function collidingSetKey(Judgment $judgment, string $key): self
+    {
+        return new self(sprintf('%s declares Question "%s" twice: once directly and once as a label of a Likelihood Set.', $judgment::class, $key));
     }
 }

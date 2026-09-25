@@ -2,6 +2,7 @@
 
 use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Contracts\Engine;
+use RobertoGallea\Judgment\Exceptions\InvalidQuestion;
 use RobertoGallea\Judgment\Exceptions\MalformedEngineResponse;
 use RobertoGallea\Judgment\Exceptions\UndeclaredLabel;
 use RobertoGallea\Judgment\Exceptions\WrongQuestionKind;
@@ -103,3 +104,24 @@ it('rejects an Engine response that leaves a label of the set unanswered, naming
 
     (new PostModeration('Buy followers now!'))->assess();
 })->throws(MalformedEngineResponse::class, 'The Engine did not answer Question "flags.self_harm" on '.PostModeration::class.'.');
+
+it('refuses a declared Question whose key collides with a label of a Likelihood Set', function () {
+    $judgment = new class extends RobertoGallea\Judgment\Judgment
+    {
+        public function evidence(): array
+        {
+            return ['post' => 'Buy followers now!'];
+        }
+
+        public function questions(): array
+        {
+            return [
+                'flags' => Likelihood::each(Flag::class),
+                'flags.spam' => Likelihood::that('Is the post spam?'),
+            ];
+        }
+    };
+    app()->instance(Engine::class, new FakeEngine([]));
+
+    $judgment->assess();
+})->throws(InvalidQuestion::class, 'declares Question "flags.spam" twice: once directly and once as a label of a Likelihood Set.');

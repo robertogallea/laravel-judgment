@@ -38,6 +38,9 @@ final class LikelihoodSet
 
         $likelihoods = [];
         foreach ($questions as $label => $question) {
+            if (str_contains((string) $label, '.')) {
+                throw InvalidQuestion::dottedSetLabel((string) $label);
+            }
             $likelihoods[(string) $label] = Likelihood::that($question);
         }
 

@@ -7,6 +7,7 @@ use RobertoGallea\Judgment\Answers\Answer;
 use RobertoGallea\Judgment\Answers\LikelihoodAnswer;
 use RobertoGallea\Judgment\Contracts\Engine;
 use RobertoGallea\Judgment\Contracts\Judge as JudgeContract;
+use RobertoGallea\Judgment\Exceptions\InvalidQuestion;
 use RobertoGallea\Judgment\Exceptions\MalformedEngineResponse;
 use RobertoGallea\Judgment\Questions\LikelihoodSet;
 use RobertoGallea\Judgment\Questions\Question;
@@ -18,7 +19,7 @@ class Judge implements JudgeContract
     public function assess(Judgment $judgment): Assessment
     {
         $questions = $judgment->questions();
-        $request = new EngineRequest($this->expand($questions), $judgment->evidence());
+        $request = new EngineRequest($this->expand($judgment, $questions), $judgment->evidence());
 
         $response = $this->container->make(Engine::class)->answer($request);
 
@@ -63,18 +64,19 @@ class Judge implements JudgeContract
      * @param  array<string, Question|LikelihoodSet>  $questions
      * @return array<string, Question>
      */
-    private function expand(array $questions): array
+    private function expand(Judgment $judgment, array $questions): array
     {
         $expanded = [];
         foreach ($questions as $key => $question) {
-            if (! $question instanceof LikelihoodSet) {
-                $expanded[$key] = $question;
+            $asked = $question instanceof LikelihoodSet
+                ? array_combine(array_map(fn (string $label) => "$key.$label", array_keys($question->likelihoods())), $question->likelihoods())
+                : [$key => $question];
 
-                continue;
-            }
-
-            foreach ($question->likelihoods() as $label => $likelihood) {
-                $expanded["$key.$label"] = $likelihood;
+            foreach ($asked as $askedKey => $single) {
+                if (isset($expanded[$askedKey])) {
+                    throw InvalidQuestion::collidingSetKey($judgment, $askedKey);
+                }
+                $expanded[$askedKey] = $single;
             }
         }
 
