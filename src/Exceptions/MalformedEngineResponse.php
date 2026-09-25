@@ -3,9 +3,8 @@
 namespace RobertoGallea\Judgment\Exceptions;
 
 use RobertoGallea\Judgment\Judgment;
-use RuntimeException;
 
-final class MalformedEngineResponse extends RuntimeException
+final class MalformedEngineResponse extends EngineFailed
 {
     public static function unanswered(Judgment $judgment, string $key): self
     {

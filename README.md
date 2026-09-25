@@ -2,7 +2,7 @@
 
 Probabilistic assessments of unstructured evidence, with deterministic, application-owned decisions.
 
-Judgment is for criteria that can only be described, not written as rules: "is this refund request an attempt to abuse the policy?", "which team should handle this ticket?". It sits after validation, authorization and business rules. An Engine answers typed Questions over the Evidence you declare; your own Decision class turns those answers into an Outcome. The Engine never sees your Outcomes or thresholds.
+Judgment is for criteria that can only be described and hard rules can be implemented: "is this refund request an attempt to abuse the policy?", "which team should handle this ticket?". It sits after validation, authorization and business rules. An Engine answers typed Questions over the Evidence you declare; your own Decision class turns those answers into an Outcome. The Engine never sees your Outcomes or thresholds.
 
 ## Installation
 
@@ -168,6 +168,51 @@ $outcome = $assessment->outcome();                        // the Judgment's defa
 $outcome = $assessment->decide(new StrictRefundDecision()); // another Decision over the same answers
 ```
 
+## When the Engine fails
+
+A failed Engine call is never turned into a default Outcome. By default `assess()` throws `RobertoGallea\Judgment\Exceptions\EngineFailed`, wrapping whatever the Engine threw. A response that leaves a Question unanswered, or answers one that was not asked, throws `MalformedEngineResponse`, which extends `EngineFailed`.
+
+To handle failures as data instead, set the failure mode to `unassessed`:
+
+```dotenv
+JUDGMENT_FAILURE=unassessed
+```
+
+`assess()` then returns an `Unassessed` result in place of an Assessment. It carries the Judgment and the exception, and has no answers and no Outcome, so the application has to decide what an unassessed Judgment means:
+
+```php
+use RobertoGallea\Judgment\Unassessed;
+
+$result = (new RefundAbuse($refund))->assess();
+
+if ($result instanceof Unassessed) {
+    report($result->exception);
+
+    return $this->sendToManualReview($refund);
+}
+
+$outcome = $result->outcome();
+```
+
+`assess()` is typed `Assessment|Unassessed` in both modes; in the default mode it never returns `Unassessed`.
+
+## Events and logging
+
+Every assessment fires an event:
+
+- `RobertoGallea\Judgment\Events\AssessmentCompleted`, with `$judgment` and `$assessment`
+- `RobertoGallea\Judgment\Events\AssessmentFailed`, with `$judgment` and `$exception`, in both failure modes
+
+The package also writes log entries you can trace an assessment by:
+
+| Message | Level | Context |
+| --- | --- | --- |
+| `Judgment assessed.` | info | `judgment`, `engine`, `model`, `request_id` |
+| `Judgment unassessed.` | warning | `judgment`, `exception`, plus `engine`, `model`, `request_id` when the Engine responded |
+| `Judgment decided.` | info | `judgment`, `engine`, `model`, `request_id`, `decision`, `outcome` |
+
+They go to the default log channel. Set `JUDGMENT_LOG_CHANNEL` to send them elsewhere, or to `null` to silence them. `$assessment->logContext()` returns the same context for your own log entries.
+
 ## Testing
 
 Bind a fake Engine in your tests to script the answers:
@@ -179,4 +224,5 @@ app()->instance(Engine::class, new MyFakeEngine(['abusive' => .80]));
 ```bash
 composer test      # Pest
 composer analyse   # PHPStan
+composer lint      # Pint (composer format to fix)
 ```

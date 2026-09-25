@@ -19,6 +19,7 @@ use RobertoGallea\Judgment\Questions\Likelihood;
 use RobertoGallea\Judgment\Questions\LikelihoodSet;
 use RobertoGallea\Judgment\Questions\Question;
 use RobertoGallea\Judgment\Questions\Rating;
+use RobertoGallea\Judgment\Support\JudgmentLog;
 
 /** The recorded answers to a Judgment's Questions: probabilistic, immutable, free of consequence. */
 final class Assessment
@@ -81,7 +82,21 @@ final class Assessment
             throw InvalidDecision::notInvokable($decision, $this->judgment);
         }
 
-        return $decision($this, $this->judgment);
+        $outcome = $decision($this, $this->judgment);
+
+        app(JudgmentLog::class)->decided($this, $decision, $outcome);
+
+        return $outcome;
+    }
+
+    /**
+     * What identifies this Assessment in logs: the Judgment and its Provenance.
+     *
+     * @return array{judgment: class-string<Judgment>, engine: string, model: string, request_id: ?string}
+     */
+    public function logContext(): array
+    {
+        return ['judgment' => $this->judgment::class, ...$this->provenance->logContext()];
     }
 
     /** @param  class-string<Question|LikelihoodSet>  $kind */

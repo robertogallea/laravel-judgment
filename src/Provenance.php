@@ -12,4 +12,14 @@ final class Provenance
         public readonly ?string $requestId = null,
         public readonly array $details = [],
     ) {}
+
+    /** @return array{engine: string, model: string, request_id: ?string} */
+    public function logContext(): array
+    {
+        return [
+            'engine' => $this->engine,
+            'model' => $this->model,
+            'request_id' => $this->requestId,
+        ];
+    }
 }

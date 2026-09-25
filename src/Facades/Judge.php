@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Facade;
 use RobertoGallea\Judgment\Contracts\Judge as JudgeContract;
 
 /**
- * @method static \RobertoGallea\Judgment\Assessment assess(\RobertoGallea\Judgment\Judgment $judgment)
+ * @method static \RobertoGallea\Judgment\Assessment|\RobertoGallea\Judgment\Unassessed assess(\RobertoGallea\Judgment\Judgment $judgment)
  *
  * @see JudgeContract
  */

@@ -5,13 +5,6 @@ use RobertoGallea\Judgment\Contracts\Engine;
 use RobertoGallea\Judgment\Facades\Judge;
 use RobertoGallea\Judgment\Provenance;
 use RobertoGallea\Judgment\Tests\Fixtures\FakeEngine;
-use RobertoGallea\Judgment\Tests\Fixtures\Refund;
-use RobertoGallea\Judgment\Tests\Fixtures\RefundAbuse;
-
-function refundAbuse(): RefundAbuse
-{
-    return new RefundAbuse(new Refund('Headphones', 120, 'Arrived damaged.'));
-}
 
 function useEngine(float $abusive): FakeEngine
 {
