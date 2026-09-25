@@ -30,9 +30,10 @@ use RobertoGallea\Judgment\Support\JudgmentLog;
 use RobertoGallea\Judgment\UntrustedText;
 
 /**
- * Answers Questions on TypeSafe's Jev. Jev's names (Noul, Choice, Score, state)
- * stay inside this driver: Likelihoods are asked as Nouls, Classifications as
- * Choices, Ratings as Scores, and the Evidence is sent as the state.
+ * Answers Questions over Jev's API: TypeSafe's hosted Jev, or a server speaking
+ * it such as Laya. Jev's names (Noul, Choice, Score, state) stay inside this
+ * driver: Likelihoods are asked as Nouls, Classifications as Choices, Ratings
+ * as Scores, and the Evidence is sent as the state.
  */
 final class JevEngine implements Engine
 {
@@ -46,22 +47,26 @@ final class JevEngine implements Engine
 
     public function __construct(
         private readonly Http $http,
-        private readonly string $key,
+        private readonly string $connection,
+        private readonly ?string $key,
         private readonly string $url,
         private readonly string $model,
         private readonly float $timeout,
         private readonly int $retries,
+        private readonly ?int $maxLabels = null,
     ) {}
 
     /**
-     * Build the Engine of a connection, refusing a model alias in production unless the connection allows it (ADR-0008).
+     * Build the Engine of a connection, refusing a missing key unless the connection
+     * does without one, and a model alias in production unless it allows it (ADR-0008).
      *
      * @param  array<string, mixed>  $config
      */
     public static function connect(Container $container, array $config, string $connection): self
     {
         $key = $config['key'] ?? null;
-        if (! is_string($key) || $key === '') {
+        $key = is_string($key) && $key !== '' ? $key : null;
+        if ($key === null && ($config['require_key'] ?? true)) {
             throw EngineNotConfigured::missingKey($connection);
         }
 
@@ -79,12 +84,34 @@ final class JevEngine implements Engine
 
         return new self(
             $container->make(Http::class),
+            $connection,
             $key,
             (string) $config['url'],
             $model,
             (float) $config['timeout'],
             (int) $config['retries'],
+            self::maxLabels($config, $connection),
         );
+    }
+
+    /**
+     * The most labels a Classification may have on this connection, a whole number of at least two, or null for the package's own limit.
+     *
+     * @param  array<string, mixed>  $config
+     */
+    private static function maxLabels(array $config, string $connection): ?int
+    {
+        $max = $config['max_labels'] ?? null;
+        if ($max === null) {
+            return null;
+        }
+
+        $max = filter_var($max, FILTER_VALIDATE_INT);
+        if ($max === false || $max < 2) {
+            throw EngineNotConfigured::invalidMaxLabels($connection);
+        }
+
+        return $max;
     }
 
     public function model(): string
@@ -94,6 +121,8 @@ final class JevEngine implements Engine
 
     public function answer(EngineRequest $request): EngineResponse
     {
+        $this->ensureAnswerable($request->questions);
+
         $response = $this->send([
             'state' => (object) $this->state($request->evidence),
             'model' => $this->model,
@@ -102,7 +131,8 @@ final class JevEngine implements Engine
 
         $requestId = $response->header('x-typesafe-request-id') ?: null;
         $answered = $response->json('answers');
-        $model = $response->json('model');
+        // Laya reports one agent name as its model; the checkpoint that answered is in its routing.
+        $model = $response->json('routing.model') ?? $response->json('model');
         if (! is_array($answered) || ! is_string($model)) {
             throw MalformedEngineResponse::unreadable($requestId);
         }
@@ -115,7 +145,7 @@ final class JevEngine implements Engine
         }
 
         return new EngineResponse($answers, new Provenance(
-            engine: 'jev',
+            engine: $this->connection,
             model: $model,
             requestId: $requestId,
             details: [
@@ -127,6 +157,25 @@ final class JevEngine implements Engine
     }
 
     /**
+     * Reject, at this Engine's boundary, a Classification with more labels than the connection's server can read (ADR-0012).
+     *
+     * @param  array<string, Question>  $questions
+     */
+    private function ensureAnswerable(array $questions): void
+    {
+        if ($this->maxLabels === null) {
+            return;
+        }
+
+        foreach ($questions as $key => $question) {
+            $labels = $question instanceof Classification ? count($question->criteria()) : 0;
+            if ($labels > $this->maxLabels) {
+                throw EngineRejectedRequest::tooManyLabels($this->connection, $key, $labels, $this->maxLabels);
+            }
+        }
+    }
+
+    /**
      * Post the body, retrying while Jev is rate-limiting or overloaded, then fail on any error left.
      *
      * @param  array<string, mixed>  $body
@@ -135,7 +184,7 @@ final class JevEngine implements Engine
     {
         for ($retry = 1; ; $retry++) {
             $response = $this->http->baseUrl($this->url)
-                ->withToken($this->key)
+                ->withHeaders($this->key === null ? [] : ['Authorization' => 'Bearer '.$this->key])
                 ->acceptJson()
                 ->timeout($this->timeout)
                 ->post('/v1/systemone', $body);

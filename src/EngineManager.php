@@ -37,9 +37,17 @@ class EngineManager
     /** The Engine of the named connection, or of the default connection when none is named. */
     public function engine(?string $connection = null): Engine
     {
-        $connection ??= $this->container->make('config')->get('judgment.engine') ?? throw EngineNotConfigured::noDefault();
+        $connection ??= $this->defaultConnection() ?? throw EngineNotConfigured::noDefault();
 
         return $this->prevented ?? $this->engines[$connection] ??= $this->build($connection);
+    }
+
+    /** The connection judgment.engine names, if any. */
+    public function defaultConnection(): ?string
+    {
+        $connection = $this->container->make('config')->get('judgment.engine');
+
+        return is_string($connection) ? $connection : null;
     }
 
     /**

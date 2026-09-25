@@ -49,7 +49,7 @@ How decisively a Classification or Rating answer favours its top option over the
 _Avoid_: Certainty, engine confidence
 
 **Provenance**:
-The record of which Engine, model version and engine request produced an Assessment.
+The record of which Engine connection, model version and engine request produced an Assessment.
 _Avoid_: Metadata, raw result
 
 **Unassessed**:

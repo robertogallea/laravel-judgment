@@ -344,7 +344,93 @@ it('explains a missing API key', function () {
     config(['judgment.engines.jev.key' => null]);
 
     refundAbuse()->assess();
-})->throws(EngineNotConfigured::class, 'The Judgment Engine connection "jev" has no API key. Set TYPESAFE_API_KEY or judgment.engines.jev.key.');
+})->throws(EngineNotConfigured::class, 'The Judgment Engine connection "jev" has no API key. Set judgment.engines.jev.key (TYPESAFE_API_KEY on the shipped jev connection), or set require_key to false for a server that needs none.');
+
+it('sends no bearer token when the connection does without a key', function () {
+    config(['judgment.engines.jev.key' => null, 'judgment.engines.jev.require_key' => false]);
+    jevResponds(['abusive' => ['type' => 'noul', 'noul' => 0.71]]);
+
+    refundAbuse()->assess();
+
+    Http::assertSent(fn (Request $request) => ! $request->hasHeader('Authorization'));
+});
+
+/**
+ * A successful response from a local Laya server, which names its agent as the model and the answering checkpoint in its routing.
+ *
+ * @param  array<string, array<string, mixed>>  $answers
+ */
+function layaResponds(array $answers, string $checkpoint = 'english'): void
+{
+    Http::fake(['localhost:8000/*' => Http::response([
+        'model' => 'laya-rl-agent',
+        'answers' => $answers,
+        'usage' => ['input_tokens' => 808, 'output_tokens' => 0],
+        'routing' => ['model' => $checkpoint],
+    ])]);
+}
+
+it('ships a laya connection that asks a local Laya server for its english checkpoint, without a key', function () {
+    config(['judgment.engine' => 'laya']);
+    layaResponds(['abusive' => ['type' => 'noul', 'noul' => 0.71]]);
+
+    $provenance = refundAbuse()->assess()->provenance;
+
+    expect(sentToJev()['model'])->toBe('english')
+        ->and($provenance->engine)->toBe('laya')
+        ->and($provenance->model)->toBe('english')
+        ->and($provenance->requestId)->toBeNull();
+    Http::assertSent(fn (Request $request) => $request->url() === 'http://localhost:8000/v1/systemone'
+        && ! $request->hasHeader('Authorization'));
+});
+
+it('records the checkpoint Laya routed to, not the model it was asked for', function () {
+    config(['judgment.engine' => 'laya', 'judgment.engines.laya.model' => 'auto']);
+    layaResponds(['abusive' => ['type' => 'noul', 'noul' => 0.71]], checkpoint: 'multilingual');
+
+    $assessment = refundAbuse()->assess();
+
+    expect(sentToJev()['model'])->toBe('auto')
+        ->and($assessment->provenance->model)->toBe('multilingual');
+});
+
+it('refuses a max_labels that leaves a Classification nothing to choose', function (mixed $max) {
+    config(['judgment.engine' => 'laya', 'judgment.engines.laya.max_labels' => $max]);
+
+    refundAbuse()->assess();
+})->throws(EngineNotConfigured::class, 'The Judgment Engine connection "laya" has an invalid max_labels. Set judgment.engines.laya.max_labels to 2 or more, or to null for the package limit.')
+    ->with(['one' => 1, 'empty env value' => '', 'a fraction' => '2.5', 'an exponent' => '1e3']);
+
+it('treats a Laya checkpoint as an alias until the laya connection allows aliases', function () {
+    config(['judgment.engine' => 'laya']);
+    Log::spy();
+    layaResponds(['abusive' => ['type' => 'noul', 'noul' => 0.71]]);
+
+    refundAbuse()->assess();
+
+    Log::shouldHaveReceived('warning')->once()->with('Judgment Engine model is an alias, not an exact version.', ['connection' => 'laya', 'model' => 'english']);
+});
+
+it('rejects a Classification over more labels than the connection accepts, before asking', function () {
+    config(['judgment.engine' => 'laya', 'judgment.engines.laya.max_labels' => 2]);
+    layaResponds([]);
+
+    $judgment = new class extends Judgment
+    {
+        public function evidence(): array
+        {
+            return [];
+        }
+
+        public function questions(): array
+        {
+            return ['stars' => Classification::of('How many stars would the reviewer give?', labels: ['1', '2', '3'])];
+        }
+    };
+
+    expect(fn () => $judgment->assess())->toThrow(EngineRejectedRequest::class, 'The Judgment Engine connection "laya" answers a Classification over at most 2 labels, but "stars" has 3. Narrow the labels or ask another connection.');
+    Http::assertNothingSent();
+});
 
 it('renders untrusted Evidence defensively inline, at the same path', function () {
     jevResponds(['spam' => ['type' => 'noul', 'noul' => 0.9]]);
@@ -428,4 +514,4 @@ it('explains a missing model', function () {
     config(['judgment.engines.jev.model' => null]);
 
     refundAbuse()->assess();
-})->throws(EngineNotConfigured::class, 'The Judgment Engine connection "jev" has no model. Set an exact version such as "jev-1.13.0" in judgment.engines.jev.model.');
+})->throws(EngineNotConfigured::class, 'The Judgment Engine connection "jev" has no model. Set the model it answers with, pinned to an exact version where the Engine has them, in judgment.engines.jev.model.');

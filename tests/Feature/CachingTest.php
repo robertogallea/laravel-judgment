@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Event;
 use RobertoGallea\Judgment\Contracts\Engine;
+use RobertoGallea\Judgment\EngineManager;
 use RobertoGallea\Judgment\Events\AssessmentCompleted;
 use RobertoGallea\Judgment\Evidence;
 use RobertoGallea\Judgment\Models\AssessmentRecord;
@@ -120,6 +121,30 @@ it('asks the Engine again when anything in the cache key differs', function (str
 
     expect($engine->requests)->toHaveCount(1);
 })->with(['other Evidence', 'a reworded Question', 'another pinned model', 'another Judgment', 'another Engine on the same model', 'the same text marked untrusted']);
+
+it('asks the Engine again on another connection serving the same model name', function () {
+    $engines = ['here' => new FakeEngine(['hyped' => .8], 'english'), 'there' => new FakeEngine(['hyped' => .1], 'english')];
+    app(EngineManager::class)->extend('fake', fn ($app, array $config, string $connection) => $engines[$connection]);
+    config(['judgment.engines.here' => ['driver' => 'fake'], 'judgment.engines.there' => ['driver' => 'fake']]);
+    $on = fn (string $connection) => new class('Best jacket ever!!!', $connection) extends CachedListingTone
+    {
+        public function __construct(string $title, private readonly string $connection)
+        {
+            parent::__construct($title);
+        }
+
+        public function engine(): ?string
+        {
+            return $this->connection;
+        }
+    };
+
+    $on('here')->assess();
+    $there = $on('there')->assess();
+
+    expect($engines['there']->requests)->toHaveCount(1)
+        ->and($there->likelihood('hyped')->probability())->toBe(.1);
+});
 
 it('asks the Engine again once the cached Assessment expires', function () {
     listingEngine(.8);

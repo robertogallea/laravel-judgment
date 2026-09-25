@@ -32,11 +32,13 @@ class Judge implements JudgeContract
         $questions = $judgment->questions();
         $request = new EngineRequest($this->expand($judgment, $questions), $judgment->evidence());
 
-        $engine = $judgment->engine() === null
-            ? $this->container->make(Engine::class)
-            : $this->container->make(EngineManager::class)->engine($judgment->engine());
+        // The default Engine goes through its container binding, which an application may replace.
+        $engines = $this->container->make(EngineManager::class);
+        $named = $judgment->engine();
+        $engine = $named === null ? $this->container->make(Engine::class) : $engines->engine($named);
+        $connection = $named ?? $engines->defaultConnection();
         $cache = $this->container->make(AssessmentCache::class);
-        if ($cached = $cache->get($judgment, $questions, $request->evidence, $engine)) {
+        if ($cached = $cache->get($judgment, $questions, $request->evidence, $engine, $connection)) {
             [$answers, $provenance, $originalId] = $cached;
             $assessment = new Assessment($judgment, $questions, $answers, $provenance);
             $this->complete($assessment, $questions, $answers, $request->evidence, $originalId);
@@ -59,7 +61,7 @@ class Judge implements JudgeContract
         $assessment = new Assessment($judgment, $questions, $answers, $response->provenance);
         $record = $this->complete($assessment, $questions, $answers, $request->evidence);
         $this->container->make(JudgmentLog::class)->assessed($assessment);
-        $cache->put($assessment, $questions, $answers, $request->evidence, $engine, $record?->id);
+        $cache->put($assessment, $questions, $answers, $request->evidence, $engine, $connection, $record?->id);
 
         return $assessment;
     }

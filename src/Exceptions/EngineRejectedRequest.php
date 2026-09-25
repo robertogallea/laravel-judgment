@@ -9,4 +9,9 @@ final class EngineRejectedRequest extends EngineFailed
     {
         return new self(self::describe('The Engine rejected the request as invalid', $status, $requestId, $reason));
     }
+
+    public static function tooManyLabels(string $connection, string $key, int $labels, int $max): self
+    {
+        return new self(sprintf('The Judgment Engine connection "%s" answers a Classification over at most %d labels, but "%s" has %d. Narrow the labels or ask another connection.', $connection, $max, $key, $labels));
+    }
 }
