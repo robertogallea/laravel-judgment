@@ -1,6 +1,8 @@
 <?php
 
 use RobertoGallea\Judgment\Contracts\Engine;
+use RobertoGallea\Judgment\EngineRequest;
+use RobertoGallea\Judgment\EngineResponse;
 use RobertoGallea\Judgment\Exceptions\EngineFailed;
 use RobertoGallea\Judgment\Exceptions\MalformedEngineResponse;
 use RobertoGallea\Judgment\Tests\Fixtures\FailingEngine;
@@ -43,3 +45,16 @@ it('treats a malformed Engine response as a failure', function () {
     expect($result)->toBeInstanceOf(Unassessed::class)
         ->and($result->exception)->toBeInstanceOf(MalformedEngineResponse::class);
 });
+
+it('lets programming errors through instead of ending Unassessed', function () {
+    config(['judgment.failure' => 'unassessed']);
+    app()->instance(Engine::class, new class implements Engine
+    {
+        public function answer(EngineRequest $request): EngineResponse
+        {
+            throw new TypeError('A bug in the Engine.');
+        }
+    });
+
+    refundAbuse()->assess();
+})->throws(TypeError::class, 'A bug in the Engine.');

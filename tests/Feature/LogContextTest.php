@@ -88,3 +88,12 @@ it('logs to the configured channel', function () {
     $channel->shouldHaveReceived('info')->with('Judgment assessed.', Mockery::any())->once();
     $channel->shouldHaveReceived('info')->with('Judgment decided.', Mockery::any())->once();
 });
+
+it('writes no log entries when logging is turned off', function () {
+    config(['judgment.log' => false]);
+    app()->instance(Engine::class, new FakeEngine(['abusive' => .80]));
+
+    refundAbuse()->assess()->outcome();
+
+    Log::shouldNotHaveReceived('info');
+});

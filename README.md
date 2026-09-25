@@ -170,7 +170,7 @@ $outcome = $assessment->decide(new StrictRefundDecision()); // another Decision 
 
 ## When the Engine fails
 
-A failed Engine call is never turned into a default Outcome. By default `assess()` throws `RobertoGallea\Judgment\Exceptions\EngineFailed`, wrapping whatever the Engine threw. A response that leaves a Question unanswered, or answers one that was not asked, throws `MalformedEngineResponse`, which extends `EngineFailed`.
+A failed Engine call is never turned into a default Outcome. By default `assess()` throws `RobertoGallea\Judgment\Exceptions\EngineFailed`, wrapping the exception the Engine threw. Errors such as a `TypeError` are bugs, not Engine failures, and pass through unwrapped. A response that leaves a Question unanswered, or answers one that was not asked, throws `MalformedEngineResponse`, which extends `EngineFailed`.
 
 To handle failures as data instead, set the failure mode to `unassessed`:
 
@@ -178,7 +178,7 @@ To handle failures as data instead, set the failure mode to `unassessed`:
 JUDGMENT_FAILURE=unassessed
 ```
 
-`assess()` then returns an `Unassessed` result in place of an Assessment. It carries the Judgment and the exception, and has no answers and no Outcome, so the application has to decide what an unassessed Judgment means:
+`assess()` then returns an `Unassessed` state in place of an Assessment. It carries the Judgment and the exception, and has no answers and no Outcome, so the application has to decide what an unassessed Judgment means:
 
 ```php
 use RobertoGallea\Judgment\Unassessed;
@@ -211,7 +211,7 @@ The package also writes log entries you can trace an assessment by:
 | `Judgment unassessed.` | warning | `judgment`, `exception`, plus `engine`, `model`, `request_id` when the Engine responded |
 | `Judgment decided.` | info | `judgment`, `engine`, `model`, `request_id`, `decision`, `outcome` |
 
-They go to the default log channel. Set `JUDGMENT_LOG_CHANNEL` to send them elsewhere, or to `null` to silence them. `$assessment->logContext()` returns the same context for your own log entries.
+They go to the default log channel. Set `JUDGMENT_LOG_CHANNEL` to send them elsewhere, or `JUDGMENT_LOG=false` to turn them off. `$assessment->logContext()` returns the same context for your own log entries.
 
 ## Testing
 

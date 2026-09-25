@@ -14,7 +14,8 @@ use RobertoGallea\Judgment\Provenance;
 
 /**
  * Writes the package's log entries, each carrying the Judgment, model and
- * engine request id, to the channel named by judgment.log_channel.
+ * engine request id, to the channel named by judgment.log_channel, unless
+ * judgment.log is off.
  *
  * @internal
  */
@@ -27,13 +28,13 @@ final class JudgmentLog
 
     public function assessed(Assessment $assessment): void
     {
-        $this->channel()->info('Judgment assessed.', $assessment->logContext());
+        $this->channel()?->info('Judgment assessed.', $assessment->logContext());
     }
 
     /** @param  Provenance|null  $provenance  known when the Engine responded but the response was unusable */
     public function unassessed(Judgment $judgment, EngineFailed $exception, ?Provenance $provenance): void
     {
-        $this->channel()->warning('Judgment unassessed.', [
+        $this->channel()?->warning('Judgment unassessed.', [
             'judgment' => $judgment::class,
             ...$provenance?->logContext() ?? [],
             'exception' => $exception,
@@ -42,15 +43,20 @@ final class JudgmentLog
 
     public function decided(Assessment $assessment, Decision $decision, Outcome $outcome): void
     {
-        $this->channel()->info('Judgment decided.', [
+        $this->channel()?->info('Judgment decided.', [
             ...$assessment->logContext(),
             'decision' => $decision::class,
             'outcome' => $outcome->value,
         ]);
     }
 
-    private function channel(): LoggerInterface
+    /** Null when judgment.log is off. */
+    private function channel(): ?LoggerInterface
     {
+        if (! $this->config->get('judgment.log')) {
+            return null;
+        }
+
         $channel = $this->config->get('judgment.log_channel');
 
         return is_string($channel) ? $this->log->channel($channel) : $this->log;

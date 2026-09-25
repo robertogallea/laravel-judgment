@@ -2,6 +2,7 @@
 
 namespace RobertoGallea\Judgment;
 
+use Exception;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Contracts\Events\Dispatcher;
 use RobertoGallea\Judgment\Answers\Answer;
@@ -16,7 +17,6 @@ use RobertoGallea\Judgment\Exceptions\MalformedEngineResponse;
 use RobertoGallea\Judgment\Questions\LikelihoodSet;
 use RobertoGallea\Judgment\Questions\Question;
 use RobertoGallea\Judgment\Support\JudgmentLog;
-use Throwable;
 
 class Judge implements JudgeContract
 {
@@ -35,7 +35,7 @@ class Judge implements JudgeContract
             $this->ensureEveryQuestionIsAnswered($judgment, $request, $response);
         } catch (EngineFailed $e) {
             return $this->fail($judgment, $e, $response);
-        } catch (Throwable $e) {
+        } catch (Exception $e) {
             return $this->fail($judgment, EngineFailed::for($judgment, $e), $response);
         }
 
