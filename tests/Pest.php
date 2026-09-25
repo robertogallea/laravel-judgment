@@ -32,3 +32,19 @@ function refundAbuse(): RefundAbuse
 {
     return new RefundAbuse(new Refund('Headphones', 120, 'Arrived damaged.'));
 }
+
+/**
+ * Lint and load a generated class, returning its reflection.
+ *
+ * @param  class-string  $class
+ * @return ReflectionClass<object>
+ */
+function generatedClass(string $path, string $class): ReflectionClass
+{
+    exec(escapeshellarg(PHP_BINARY).' -l '.escapeshellarg($path).' 2>&1', $output, $status);
+    expect($status)->toBe(0, implode("\n", $output));
+
+    require_once $path;
+
+    return new ReflectionClass($class);
+}

@@ -1,0 +1,21 @@
+<?php
+
+namespace {{ namespace }};
+
+{{ imports }}use LogicException;
+use RobertoGallea\Judgment\Assessment;
+use RobertoGallea\Judgment\Contracts\Decision;
+
+final class {{ class }} implements Decision
+{
+    public function __invoke(Assessment $assessment, {{ judgmentType }} $judgment): {{ outcomeType }}
+    {
+        // Thresholds cannot be guessed: an Engine's probabilities are asymmetric
+        // per Question, so generic bands are wrong. Calibrate every threshold
+        // against labelled examples with `php artisan judgment:eval`.
+        return match (true) {
+            // $assessment->likelihood('question')->above(/* calibrated */) => {{ outcomeType }}::Case,
+            default => throw new LogicException('{{ class }} is not calibrated yet: run php artisan judgment:eval.'),
+        };
+    }
+}

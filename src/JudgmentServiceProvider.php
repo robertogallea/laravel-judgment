@@ -4,6 +4,8 @@ namespace RobertoGallea\Judgment;
 
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
+use RobertoGallea\Judgment\Console\MakeDecisionCommand;
+use RobertoGallea\Judgment\Console\MakeJudgmentCommand;
 use RobertoGallea\Judgment\Contracts\Engine;
 use RobertoGallea\Judgment\Contracts\Judge as JudgeContract;
 use RobertoGallea\Judgment\Exceptions\EngineNotConfigured;
@@ -29,6 +31,8 @@ class JudgmentServiceProvider extends ServiceProvider
             $this->publishes([
                 __DIR__.'/../config/judgment.php' => config_path('judgment.php'),
             ], 'judgment-config');
+
+            $this->commands([MakeJudgmentCommand::class, MakeDecisionCommand::class]);
         }
     }
 }

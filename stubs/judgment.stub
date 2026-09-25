@@ -1,0 +1,40 @@
+<?php
+
+namespace {{ namespace }};
+
+{{ subjectImport }}use RobertoGallea\Judgment\Judgment;
+
+final class {{ class }} extends Judgment
+{
+    public function __construct(public readonly {{ subjectType }} ${{ subjectVariable }}) {}
+
+    /**
+     * Declare every field explicitly, so adding a column never silently
+     * changes what is assessed. Mark end-user text as untrusted.
+     */
+    public function evidence(): array
+    {
+        return [
+            //
+        ];
+    }
+
+    /**
+     * Ask each Question about the world, never about what to do.
+     */
+    public function questions(): array
+    {
+        return [
+            // 'question' => Likelihood::that('Is ...?')
+            //     ->means(true: '...', false: '...'),
+        ];
+    }
+
+    /**
+     * The default Decision: generate one with `php artisan make:decision`.
+     */
+    public function decision(): ?string
+    {
+        return null;
+    }
+}
