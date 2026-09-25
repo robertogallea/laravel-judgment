@@ -4,6 +4,7 @@ namespace RobertoGallea\Judgment;
 
 use RobertoGallea\Judgment\Contracts\Decision;
 use RobertoGallea\Judgment\Contracts\Judge;
+use RobertoGallea\Judgment\Questions\LikelihoodSet;
 use RobertoGallea\Judgment\Questions\Question;
 
 /**
@@ -20,7 +21,7 @@ abstract class Judgment
      */
     abstract public function evidence(): array;
 
-    /** @return array<string, Question> */
+    /** @return array<string, Question|LikelihoodSet> */
     abstract public function questions(): array;
 
     /** @return class-string<Decision>|null */

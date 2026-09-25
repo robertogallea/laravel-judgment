@@ -36,4 +36,14 @@ final class InvalidQuestion extends InvalidArgumentException
     {
         return new self(sprintf('A Rating needs 2 to 10 levels; %d given.', $given));
     }
+
+    public static function unquestionedLabels(): self
+    {
+        return new self('Each label of a Likelihood Set supplies its complete question: give a label => question map or a backed enum with a question() method.');
+    }
+
+    public static function noSetLabels(): self
+    {
+        return new self('A Likelihood Set needs at least 1 label; 0 given.');
+    }
 }
