@@ -514,6 +514,53 @@ public function handle(AssessmentResolved $event): void
 }
 ```
 
+## Calibration
+
+An Engine's probabilities differ per Question, so each threshold should come from evidence. `judgment:eval` asks the configured Engine about labelled cases, applies the Decision to each answer, and reports how the Decision's thresholds behave:
+
+```bash
+php artisan judgment:eval RefundAbuse                                   # past Resolutions are the labels
+php artisan judgment:eval RefundAbuse --dataset=storage/refunds.json    # a labelled dataset
+php artisan judgment:eval RefundAbuse --decision=RefundDecision --decision=StrictRefundDecision
+php artisan judgment:eval RefundAbuse --engine=jev --engine=jev-next     # compare two pinned models
+```
+
+A bare Judgment name is looked up under `App\Judgments`, and a bare Decision name under `App\Decisions`.
+
+**Labels.** Without `--dataset`, the Judgment's resolved `AssessmentRecord`s are the cases: one per Evidence, labelled with its latest Resolution. Only Assessments sent to Review get a Resolution, so these labels cluster where the Decision was unsure; add a dataset to cover the confident bands. Each case is asked over the Evidence as it was recorded, with untrusted text marked again. When the Evidence was not stored, it is asked over the Subject's current Evidence. A record whose Subject no longer exists is skipped, and the report says how many were. A dataset is a JSON list of cases. Each case gives a Subject, either as attributes (built unsaved) or as a key (found), and the Outcome value a person says is right:
+
+```json
+[
+    {"subject": {"item": "Headphones", "amount_eur": 120, "explanation": "Arrived damaged."}, "expected": "approve"},
+    {"subject": 42, "expected": "reject"}
+]
+```
+
+A dataset works with a Judgment constructed with an Eloquent model. An expected Outcome that is not a value of the Decision's Outcome enum stops the run, so a typo cannot quietly lower accuracy. So does one that requires Review, which no Resolution can be.
+
+**Decisions.** A set of thresholds is a Decision, so compare candidates by passing several `--decision` options. Without the option, the Judgment's default Decision applies. Nothing is cached, recorded, logged or announced. A case the Engine fails on is counted as unassessed, under the model version the Engine reported for the other cases.
+
+**Engines.** Each `--engine` names a connection in `judgment.engines`. Every case is asked of each one, so two pinned model versions are compared on the same cases. Without the option, each Judgment's own Engine is asked.
+
+**The report.** Results are grouped by question-set fingerprint, model version, Decision and version, and Evidence language, and groups are never mixed (ADR-0008). A summary table gives one row per group:
+
+| Column | Meaning |
+| --- | --- |
+| Questions | the first characters of the question-set fingerprint |
+| Cases, Unassessed | the cases asked, and how many of them the Engine failed on |
+| Review rate | the share of assessed cases whose Outcome requires Review |
+| Accuracy | the share of Outcomes decided without Review that match the label, with the counts |
+
+Accuracy leaves out cases sent to Review, because a person decides those. Loosening a threshold trades Review rate against accuracy. For each group, a band table then splits the cases by tenths of each answer (`0.4–0.5` includes 0.4 but not 0.5; the last band includes 1.0). A Likelihood is split by its probability, each Likelihood of a Set by its own probability (`flags.hate`), and a Classification or Rating by its Confidence. Each band shows its cases, the labels they carry, and the Decision's accuracy and Review rate there. A band whose labels are mixed is where a threshold belongs, or where Review earns its cost:
+
+```
+ReviewedReturnDecision · jev-1.13.0 · en · questions 3f2a9c1b
+| Question   | Band    | Cases | Expected             | Accuracy | Review rate |
+| abusive    | 0.1–0.2 | 14    | approve 14           | 100.0%   | 0.0%        |
+| abusive    | 0.4–0.5 | 6     | approve 2, reject 4  | —        | 100.0%      |
+| abusive    | 0.9–1.0 | 9     | reject 9             | 100.0%   | 0.0%        |
+```
+
 ## Events and logging
 
 Every assessment fires an event:

@@ -2,6 +2,7 @@
 
 namespace RobertoGallea\Judgment\Tests\Fixtures;
 
+use Closure;
 use LogicException;
 use RobertoGallea\Judgment\Answers\Answer;
 use RobertoGallea\Judgment\Answers\LikelihoodAnswer;
@@ -19,15 +20,18 @@ final class FakeEngine implements Engine
     public array $requests = [];
 
     /**
-     * @param  array<string, float|non-empty-array<string, float>|non-empty-list<float>>  $answers  a probability per Likelihood,
-     *                                                                                              a label => probability map per Classification,
-     *                                                                                              a probability per level per Rating
+     * The answers script a probability per Likelihood, a label => probability map per Classification
+     * and a probability per level per Rating; or a closure given the Evidence returns them per request.
+     *
+     * @param  array<string, float|non-empty-array<string, float>|non-empty-list<float>>|Closure(array<string, mixed>): array<string, mixed>  $answers
      * @param  array<string, mixed>  $details  the Provenance details to report
+     * @param  string|null  $reports  the model version answers report, when not the configured one (as for an alias)
      */
     public function __construct(
-        private readonly array $answers,
+        private readonly array|Closure $answers,
         private readonly string $model = 'fake-1.0.0',
         private readonly array $details = [],
+        private readonly ?string $reports = null,
     ) {}
 
     public function model(): string
@@ -40,13 +44,14 @@ final class FakeEngine implements Engine
         $this->requests[] = $request;
 
         $answers = [];
-        foreach ($this->answers as $key => $scripted) {
+        $scripts = $this->answers instanceof Closure ? ($this->answers)($request->evidence) : $this->answers;
+        foreach ($scripts as $key => $scripted) {
             $answers[$key] = $this->scriptedAnswer($request->questions[$key] ?? null, $scripted);
         }
 
         return new EngineResponse(
             $answers,
-            new Provenance(engine: 'fake', model: $this->model, requestId: 'req-'.count($this->requests), details: $this->details),
+            new Provenance(engine: 'fake', model: $this->reports ?? $this->model, requestId: 'req-'.count($this->requests), details: $this->details),
         );
     }
 

@@ -29,7 +29,7 @@ final class ReturnAbuse extends Judgment
 
     public function language(): string
     {
-        return 'en';
+        return $this->request->language ?? 'en';
     }
 
     public function decision(): string
