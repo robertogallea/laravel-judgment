@@ -27,10 +27,11 @@ abstract class TestCase extends Orchestra
         $this->loadMigrationsFrom(__DIR__.'/database/migrations');
     }
 
-    /** The package's migration ships as a stub, which the Migrator does not load. */
+    /** The package's migrations ship as stubs, which the Migrator does not load. */
     protected function afterRefreshingDatabase(): void
     {
         (require __DIR__.'/../database/migrations/create_judgment_assessments_table.php.stub')->up();
+        (require __DIR__.'/../database/migrations/add_failures_to_judgment_assessments_table.php.stub')->up();
     }
 
     protected function getPackageAliases($app): array

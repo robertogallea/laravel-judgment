@@ -4,16 +4,20 @@ namespace RobertoGallea\Judgment\Console;
 
 use Illuminate\Console\Command;
 use RobertoGallea\Judgment\Calibration\Calibration;
-use RobertoGallea\Judgment\Calibration\Cases;
-use RobertoGallea\Judgment\Calibration\Group;
+use RobertoGallea\Judgment\Calibration\CalibrationBand;
+use RobertoGallea\Judgment\Calibration\CalibrationIdentity;
+use RobertoGallea\Judgment\Calibration\CalibrationReport;
+use RobertoGallea\Judgment\Calibration\CalibrationResult;
 use RobertoGallea\Judgment\Contracts\Decision;
 use RobertoGallea\Judgment\Exceptions\InvalidCalibration;
 use RobertoGallea\Judgment\Judgment;
 use Symfony\Component\Console\Attribute\AsCommand;
+use Symfony\Component\Console\Output\OutputInterface;
+use Throwable;
 
 /**
  * Calibration: runs a Judgment and its Decisions against labelled cases with the configured
- * Engine, and reports how their thresholds behave, per calibration identity.
+ * Engine, and reports how their thresholds behave, per Calibration Identity.
  */
 #[AsCommand(name: 'judgment:eval')]
 class CalibrateCommand extends Command
@@ -22,79 +26,137 @@ class CalibrateCommand extends Command
         {judgment : The Judgment to calibrate}
         {--dataset= : A JSON file of labelled cases; past Resolutions are the labels when omitted}
         {--decision=* : A Decision to calibrate instead of the Judgment\'s default; repeat to compare}
-        {--engine=* : An Engine connection to ask instead of the Judgment\'s own; repeat to compare models}';
+        {--engine=* : An Engine connection to ask instead of the Judgment\'s own; repeat to compare models}
+        {--json : Print the report as JSON}';
 
     protected $description = 'Calibrate a Judgment\'s Decisions against labelled cases';
 
-    public function handle(Calibration $calibration): int
+    public function handle(): int
     {
         try {
-            $judgment = $this->class($this->strings('judgment')[0] ?? '', 'Judgments', Judgment::class);
-            $decisions = array_map(fn (string $name) => $this->class($name, 'Decisions', Decision::class), $this->strings('decision'));
+            $calibration = Calibration::for($this->class($this->strings('judgment')[0] ?? '', 'Judgments', Judgment::class))
+                ->engines(...$this->strings('engine'))
+                ->decisions(...array_map(fn (string $name) => $this->class($name, 'Decisions', Decision::class), $this->strings('decision')));
             $dataset = $this->strings('dataset')[0] ?? null;
-            $skipped = 0;
-            $cases = $dataset === null ? Cases::fromResolutions($judgment, $skipped) : Cases::fromDataset($judgment, $dataset);
-            if ($cases === []) {
-                throw InvalidCalibration::noCases($judgment);
+
+            $report = ($dataset === null ? $calibration->fromResolutions() : $calibration->fromDataset($dataset))->run();
+        } catch (Throwable $e) {
+            // With --json, every error is JSON too, so standard output always parses.
+            if ($this->option('json')) {
+                $this->json(['error' => $e->getMessage()]);
+
+                return self::FAILURE;
             }
 
-            $groups = $calibration->run($cases, $this->strings('engine') ?: [null], $decisions ?: [null]);
-        } catch (InvalidCalibration $e) {
+            if (! $e instanceof InvalidCalibration) {
+                throw $e;
+            }
+
             $this->components->error($e->getMessage());
 
             return self::FAILURE;
         }
 
-        if ($skipped > 0) {
-            $this->components->warn(sprintf('Skipped %d %s whose Subject no longer exists.', $skipped, str('Resolution')->plural($skipped)));
+        if ($this->option('json')) {
+            $this->json($this->report($report));
+
+            return self::SUCCESS;
         }
 
-        $this->summary($groups);
-        foreach ($groups as $group) {
-            $this->bands($group);
+        if ($report->skipped > 0) {
+            $this->components->warn(sprintf('Skipped %d %s whose Subject no longer exists.', $report->skipped, str('Resolution')->plural($report->skipped)));
+        }
+
+        $this->summary($report->results);
+        foreach ($report->results as $result) {
+            $this->bands($result);
         }
 
         return self::SUCCESS;
     }
 
-    /** @param  list<Group>  $groups */
-    private function summary(array $groups): void
+    /**
+     * Print data as JSON, raw so that console tags in it are never styled.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function json(array $data): void
+    {
+        $this->output->writeln(json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR), OutputInterface::OUTPUT_RAW);
+    }
+
+    /**
+     * The report as plain data, with every field and measure of its results and bands.
+     *
+     * @return array<string, mixed>
+     */
+    private function report(CalibrationReport $report): array
+    {
+        return [
+            'results' => array_map(fn (CalibrationResult $result) => [
+                'identity' => [
+                    'questions' => $result->identity->questions,
+                    'model' => $result->identity->model,
+                    'decision' => $result->identity->decision,
+                    'decisionVersion' => $result->identity->decisionVersion,
+                    'language' => $result->identity->language,
+                ],
+                'cases' => $result->cases,
+                'unassessed' => $result->unassessed,
+                'sentToReview' => $result->sentToReview,
+                'automatic' => $result->automatic,
+                'correct' => $result->correct,
+                'reviewRate' => $result->reviewRate(),
+                'accuracy' => $result->accuracy(),
+                'bands' => array_map(fn (CalibrationBand $band) => [
+                    'question' => $band->question,
+                    'from' => $band->from,
+                    'to' => $band->to,
+                    'cases' => $band->cases,
+                    'expected' => (object) $band->expected,
+                    'sentToReview' => $band->sentToReview,
+                    'automatic' => $band->automatic,
+                    'correct' => $band->correct,
+                    'reviewRate' => $band->reviewRate(),
+                    'accuracy' => $band->accuracy(),
+                ], $result->bands),
+            ], $report->results),
+            'skipped' => $report->skipped,
+        ];
+    }
+
+    /** @param  list<CalibrationResult>  $results */
+    private function summary(array $results): void
     {
         $this->table(
             ['Questions', 'Model', 'Decision', 'Language', 'Cases', 'Unassessed', 'Review rate', 'Accuracy'],
-            array_map(fn (Group $group) => [
-                substr($group->questions, 0, 8),
-                $group->model,
-                $this->decision($group),
-                $group->language ?? '—',
-                $group->tally->cases + $group->tally->unassessed,
-                $group->tally->unassessed,
-                $this->percentage($group->tally->reviewRate()),
-                $this->percentage($group->tally->accuracy()).($group->tally->automatic > 0 ? " ({$group->tally->correct}/{$group->tally->automatic})" : ''),
-            ], $groups),
+            array_map(fn (CalibrationResult $result) => [
+                substr($result->identity->questions, 0, 8),
+                $result->identity->model,
+                $this->decision($result->identity),
+                $result->identity->language ?? '—',
+                $result->cases,
+                $result->unassessed,
+                $this->percentage($result->reviewRate()),
+                $this->percentage($result->accuracy()).($result->automatic > 0 ? " ({$result->correct}/{$result->automatic})" : ''),
+            ], $results),
         );
     }
 
-    private function bands(Group $group): void
+    private function bands(CalibrationResult $result): void
     {
+        $identity = $result->identity;
         $this->newLine();
-        $this->line(sprintf('<options=bold>%s</> · %s · %s · questions %s', $this->decision($group), $group->model, $group->language ?? 'unknown language', substr($group->questions, 0, 8)));
+        $this->line(sprintf('<options=bold>%s</> · %s · %s · questions %s', $this->decision($identity), $identity->model, $identity->language ?? 'unknown language', substr($identity->questions, 0, 8)));
 
-        $rows = [];
-        foreach ($group->bands as $question => $bands) {
-            foreach ($bands as $band => $tally) {
-                $rows[] = [
-                    $question,
-                    sprintf('%.1f–%.1f', $band / 10, ($band + 1) / 10),
-                    $tally->cases,
-                    implode(', ', array_map(fn (string $outcome, int $cases) => "$outcome $cases", array_keys($tally->expected), $tally->expected)),
-                    $this->percentage($tally->accuracy()),
-                    $this->percentage($tally->reviewRate()),
-                ];
-            }
-        }
-
-        $this->table(['Question', 'Band', 'Cases', 'Expected', 'Accuracy', 'Review rate'], $rows);
+        $this->table(['Question', 'Band', 'Cases', 'Expected', 'Accuracy', 'Review rate'], array_map(fn (CalibrationBand $band) => [
+            $band->question,
+            sprintf('%.1f–%.1f', $band->from, $band->to),
+            $band->cases,
+            implode(', ', array_map(fn (string $outcome, int $cases) => "$outcome $cases", array_keys($band->expected), $band->expected)),
+            $this->percentage($band->accuracy()),
+            $this->percentage($band->reviewRate()),
+        ], $result->bands));
     }
 
     /**
@@ -133,9 +195,9 @@ class CalibrateCommand extends Command
         return $class;
     }
 
-    private function decision(Group $group): string
+    private function decision(CalibrationIdentity $identity): string
     {
-        return class_basename($group->decision).($group->version === null ? '' : " v{$group->version}");
+        return class_basename($identity->decision).($identity->decisionVersion === null ? '' : " v{$identity->decisionVersion}");
     }
 
     private function percentage(?float $share): string

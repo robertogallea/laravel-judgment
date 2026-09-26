@@ -6,7 +6,7 @@ use InvalidArgumentException;
 use RobertoGallea\Judgment\Contracts\Decision;
 use RobertoGallea\Judgment\Contracts\Outcome;
 
-/** A judgment:eval run that cannot go on: an unknown class, a dataset it cannot read, or an expected Outcome no Decision can settle on. */
+/** A Calibration run that cannot go on: an unknown class, a dataset it cannot read, or an expected Outcome no Decision can settle on. */
 final class InvalidCalibration extends InvalidArgumentException
 {
     public static function notA(string $kind, string $name): self
@@ -15,13 +15,13 @@ final class InvalidCalibration extends InvalidArgumentException
     }
 
     /** @param  class-string<Outcome>  $outcome */
-    public static function notAnOutcome(string $expected, Decision $decision, string $outcome): self
+    public static function notAnOutcome(Outcome|string $expected, Decision $decision, string $outcome): self
     {
         $values = array_map(fn (Outcome $case) => (string) $case->value, $outcome::cases());
 
         return new self(sprintf(
-            '"%s" is not an Outcome of %s: expected %s.',
-            $expected,
+            '%s is not an Outcome of %s: expected %s.',
+            $expected instanceof Outcome ? class_basename($expected).'::'.$expected->name : '"'.$expected.'"',
             class_basename($decision),
             count($values) > 1 ? implode(', ', array_slice($values, 0, -1)).' or '.end($values) : implode('', $values),
         ));
@@ -30,6 +30,11 @@ final class InvalidCalibration extends InvalidArgumentException
     public static function requiresReview(string $expected): self
     {
         return new self(sprintf('"%s" requires Review, so it cannot be the right Outcome of a case.', $expected));
+    }
+
+    public static function notALabelledCase(int $index, string $judgment): self
+    {
+        return new self(sprintf('Case %d is not a labelled case of %s.', $index, $judgment));
     }
 
     public static function noCases(string $judgment): self

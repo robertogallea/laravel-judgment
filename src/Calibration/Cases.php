@@ -39,7 +39,7 @@ final class Cases
                 throw InvalidCalibration::invalidCase($index, 'names no expected Outcome');
             }
 
-            return LabelledCase::of(new $judgment(self::subject($subject, $case['subject'] ?? null, $index)), (string) $expected);
+            return LabelledCase::labelled(new $judgment(self::subject($subject, $case['subject'] ?? null, $index)), (string) $expected);
         }, $cases, array_keys($cases));
     }
 
@@ -71,7 +71,7 @@ final class Cases
 
             $instance = new $judgment($record->subject);
             $cases[$record->evidence_fingerprint] = $record->evidence === null
-                ? LabelledCase::of($instance, $record->resolution)
+                ? LabelledCase::labelled($instance, $record->resolution)
                 : new LabelledCase($instance, self::marked($record->evidence, $record->untrusted_paths), $record->resolution, $record->language);
         }
 

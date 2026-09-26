@@ -2,46 +2,17 @@
 
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Gate;
 use RobertoGallea\Judgment\Contracts\Engine;
 use RobertoGallea\Judgment\EngineManager;
-use RobertoGallea\Judgment\Models\AssessmentRecord;
-use RobertoGallea\Judgment\Tests\Fixtures\AssessmentRecordPolicy;
 use RobertoGallea\Judgment\Tests\Fixtures\FakeEngine;
 use RobertoGallea\Judgment\Tests\Fixtures\RefundOutcome;
 use RobertoGallea\Judgment\Tests\Fixtures\ReturnAbuse;
 use RobertoGallea\Judgment\Tests\Fixtures\ReturnDecision;
 use RobertoGallea\Judgment\Tests\Fixtures\ReturnRequest;
 use RobertoGallea\Judgment\Tests\Fixtures\ReviewedReturnDecision;
-use RobertoGallea\Judgment\Tests\Fixtures\Reviewer;
 use RobertoGallea\Judgment\UntrustedText;
 
 afterEach(fn () => File::delete(storage_path('calibration.json')));
-
-/**
- * Write labelled cases to a dataset file.
- *
- * @param  list<array<string, mixed>>  $cases
- */
-function labelledCases(array $cases): string
-{
-    File::put($path = storage_path('calibration.json'), json_encode($cases, JSON_THROW_ON_ERROR));
-
-    return $path;
-}
-
-/**
- * A FakeEngine answering whether a return is abusive with the probability given for its reason.
- *
- * @param  array<string, float>  $abusive  reason => probability
- */
-function abuseEngine(array $abusive, string $model = 'fake-1.0.0'): FakeEngine
-{
-    return new FakeEngine(fn (array $evidence) => [
-        'abusive' => $abusive[(string) $evidence['customer']['reason']],
-        'department' => ['billing' => .70, 'technical' => .20, 'other' => .10],
-    ], $model);
-}
 
 /** @param  array<string, mixed>  $options */
 function calibrate(array $options): string
@@ -70,19 +41,6 @@ it('calibrates the default Decision against a labelled dataset of Subjects', fun
 
     expect($report)->toMatch(row('fake-1.0.0', 'ReturnDecision v2', 'en', '3', '0', '0.0%', '66.7% (2/3)'));
 });
-
-/** Four labelled returns: abusive .10 (approve), .42 (approve), .45 (reject) and .90 (reject). */
-function fourReturns(): string
-{
-    app()->instance(Engine::class, abuseEngine(['Zip broke' => .10, 'Too small' => .42, 'Changed my mind' => .45, 'Wore it to a wedding' => .90]));
-
-    return labelledCases([
-        ['subject' => ['item' => 'Jacket', 'reason' => 'Zip broke'], 'expected' => 'approve'],
-        ['subject' => ['item' => 'Boots', 'reason' => 'Too small'], 'expected' => 'approve'],
-        ['subject' => ['item' => 'Shoes', 'reason' => 'Changed my mind'], 'expected' => 'reject'],
-        ['subject' => ['item' => 'Dress', 'reason' => 'Wore it to a wedding'], 'expected' => 'reject'],
-    ]);
-}
 
 it('reports the Review rate of each Decision, measuring accuracy over the Outcomes decided without Review', function () {
     $report = calibrate([
@@ -121,21 +79,6 @@ it('finds a dataset Subject by its key', function () {
 
     expect($report)->toMatch(row('ReturnDecision v2', 'en', '1', '0', '0.0%', '100.0% (1/1)'));
 });
-
-/** Assess a return, send it to Review and, when a Resolution is given, resolve it so. */
-function reviewedReturn(string $reason, ?RefundOutcome $resolution): ReturnRequest
-{
-    app()->instance(Engine::class, abuseEngine([$reason => .42]));
-    $request = ReturnRequest::create(['item' => 'Jacket', 'reason' => $reason]);
-    (new ReturnAbuse($request))->assess()->decide(new ReviewedReturnDecision);
-
-    if ($resolution !== null) {
-        Gate::policy(AssessmentRecord::class, AssessmentRecordPolicy::class);
-        AssessmentRecord::query()->latest('id')->firstOrFail()->resolve($resolution, Reviewer::create(['name' => 'Ada', 'can_resolve' => true]));
-    }
-
-    return $request;
-}
 
 it('uses past Resolutions as labels when no dataset is given, asking over the Evidence as it was recorded', function () {
     reviewedReturn('Wore it to a wedding', RefundOutcome::Reject);
@@ -252,4 +195,73 @@ it('counts a failed case under the model version its Engine reports', function (
 
     expect($report)->toMatch(row('fake-1.2.0', 'ReturnDecision v2', 'en', '2', '1', '0.0%', '100.0% (1/1)'))
         ->not->toContain('fake-latest');
+});
+
+it('prints the whole report as JSON for tools and CI', function () {
+    $status = Artisan::call('judgment:eval', [
+        'judgment' => ReturnAbuse::class,
+        '--dataset' => fourReturns(),
+        '--decision' => [ReviewedReturnDecision::class],
+        '--json' => true,
+    ]);
+    $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($status)->toBe(0)
+        ->and($report['skipped'])->toBe(0)
+        ->and($report['results'])->toHaveCount(1)
+        ->and($report['results'][0]['identity'])->toMatchArray([
+            'model' => 'fake-1.0.0',
+            'decision' => ReviewedReturnDecision::class,
+            'decisionVersion' => null,
+            'language' => 'en',
+        ])
+        ->and($report['results'][0]['identity']['questions'])->toMatch('/^[0-9a-f]{16,}$/')
+        ->and($report['results'][0])->toMatchArray([
+            'cases' => 4,
+            'unassessed' => 0,
+            'sentToReview' => 2,
+            'automatic' => 2,
+            'correct' => 2,
+            'reviewRate' => 0.5,
+            'accuracy' => 1.0,
+        ])
+        ->and($report['results'][0]['bands'])->toBe([
+            ['question' => 'abusive', 'from' => 0.1, 'to' => 0.2, 'cases' => 1, 'expected' => ['approve' => 1], 'sentToReview' => 0, 'automatic' => 1, 'correct' => 1, 'reviewRate' => 0.0, 'accuracy' => 1.0],
+            ['question' => 'abusive', 'from' => 0.4, 'to' => 0.5, 'cases' => 2, 'expected' => ['approve' => 1, 'reject' => 1], 'sentToReview' => 2, 'automatic' => 0, 'correct' => 0, 'reviewRate' => 1.0, 'accuracy' => null],
+            ['question' => 'abusive', 'from' => 0.9, 'to' => 1.0, 'cases' => 1, 'expected' => ['reject' => 1], 'sentToReview' => 0, 'automatic' => 1, 'correct' => 1, 'reviewRate' => 0.0, 'accuracy' => 1.0],
+            ['question' => 'department', 'from' => 0.5, 'to' => 0.6, 'cases' => 4, 'expected' => ['approve' => 2, 'reject' => 2], 'sentToReview' => 2, 'automatic' => 2, 'correct' => 2, 'reviewRate' => 0.5, 'accuracy' => 1.0],
+        ]);
+});
+
+it('counts skipped Resolutions in the JSON report, printing nothing else', function () {
+    reviewedReturn('Wore it to a wedding', RefundOutcome::Reject);
+    reviewedReturn('Zip broke', RefundOutcome::Approve)->delete();
+    app()->instance(Engine::class, abuseEngine(['Wore it to a wedding' => .90]));
+
+    Artisan::call('judgment:eval', ['judgment' => ReturnAbuse::class, '--json' => true]);
+
+    $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($report['skipped'])->toBe(1)
+        ->and($report['results'])->toHaveCount(1)
+        ->and($report['results'][0]['cases'])->toBe(1);
+});
+
+it('prints an error as JSON and fails', function () {
+    app()->instance(Engine::class, abuseEngine(['Zip broke' => .10]));
+
+    $status = Artisan::call('judgment:eval', ['judgment' => ReturnAbuse::class, '--json' => true, '--dataset' => labelledCases([
+        ['subject' => ['item' => 'Jacket', 'reason' => 'Zip broke'], 'expected' => 'aprove'],
+    ])]);
+
+    expect($status)->toBe(1)
+        ->and(json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR))
+        ->toBe(['error' => '"aprove" is not an Outcome of ReturnDecision: expected approve, escalate or reject.']);
+});
+
+it('prints any error as JSON, such as an Engine connection that is not configured', function () {
+    $status = Artisan::call('judgment:eval', ['judgment' => ReturnAbuse::class, '--dataset' => fourReturns(), '--engine' => ['nope'], '--json' => true]);
+
+    expect($status)->toBe(1)
+        ->and(json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR)['error'])->toContain('"nope" is not configured');
 });

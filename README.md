@@ -32,13 +32,13 @@ final class RefundDecision implements Decision
 - **[Pure Decisions](https://robertogallea.github.io/laravel-judgment/#deciding)** you own, mapping answers and Subject facts to a backed-enum Outcome.
 - **[Untrusted Evidence](https://robertogallea.github.io/laravel-judgment/#untrusted-evidence)**: end-user text is assessed as a claim, never followed as instructions.
 - **[Engines](https://robertogallea.github.io/laravel-judgment/#engines)**: TypeSafe's hosted Jev, a self-hosted Laya server, or your own Engine, with pinned models.
-- **[Failures as data](https://robertogallea.github.io/laravel-judgment/#when-the-engine-fails)**: an Engine failure is thrown or returned as `Unassessed`, never turned into a default Outcome.
+- **[Failures as data](https://robertogallea.github.io/laravel-judgment/#when-the-engine-fails)**: an Engine failure is thrown or returned as `Unassessed`, never turned into a default Outcome, and each failed attempt is recorded.
 - **[Audited Assessments](https://robertogallea.github.io/laravel-judgment/#persisted-assessments)**: Evidence, answers, Provenance and Outcome recorded, and replayable under another Decision.
 - **[Review and Resolution](https://robertogallea.github.io/laravel-judgment/#review-and-resolution)**: uncertain Outcomes go to a person, whose Resolution is recorded next to the automatic one.
-- **[Queued assessment](https://robertogallea.github.io/laravel-judgment/#queued-assessment)** and opt-in **[caching](https://robertogallea.github.io/laravel-judgment/#caching)**.
-- **[Calibration](https://robertogallea.github.io/laravel-judgment/#calibration)** of thresholds against labelled cases with `judgment:eval`.
-- **[Strict test fakes](https://robertogallea.github.io/laravel-judgment/#testing)**: `Assessment::fake()` and `Judge::fake()`, no Engine needed.
-- **[Coding-agent skills](https://robertogallea.github.io/laravel-judgment/#coding-agents-laravel-boost)** for Laravel Boost, plus [events and logging](https://robertogallea.github.io/laravel-judgment/#events-and-logging) for every assessment.
+- **[Queued assessment](https://robertogallea.github.io/laravel-judgment/#queued-assessment)**, [decided](https://robertogallea.github.io/laravel-judgment/#deciding-after-the-queue) with the default Decision, and opt-in **[caching](https://robertogallea.github.io/laravel-judgment/#caching)**.
+- **[Calibration](https://robertogallea.github.io/laravel-judgment/#calibration)** of thresholds against labelled cases, with `judgment:eval` (tables or [JSON](https://robertogallea.github.io/laravel-judgment/#calibration-json)) or [from code](https://robertogallea.github.io/laravel-judgment/#calibration-api), over Resolutions, a dataset or cases in memory.
+- **[Strict test fakes](https://robertogallea.github.io/laravel-judgment/#testing)**: `Assessment::fake()` and `Judge::fake()`, no Engine needed; `Judge::fake()` records like the Judge.
+- **[Coding-agent skills](https://robertogallea.github.io/laravel-judgment/#coding-agents-laravel-boost)** for Laravel Boost, plus [events and logging](https://robertogallea.github.io/laravel-judgment/#events-and-logging) for every assessment and [every decision](https://robertogallea.github.io/laravel-judgment/#acting-on-the-outcome).
 
 ## Use cases
 
@@ -77,6 +77,8 @@ TYPESAFE_API_KEY=your-key
 ```
 
 Publish the config with `php artisan vendor:publish --tag=judgment-config`. To run your own Engine instead, see [Laya](https://robertogallea.github.io/laravel-judgment/#laya).
+
+Upgrading from v0.1.0? Follow [Upgrading](https://robertogallea.github.io/laravel-judgment/#upgrading).
 
 ## Quick start
 
@@ -162,7 +164,7 @@ $outcome = $assessment->outcome();                    // RefundOutcome::Escalate
 
 ## Documentation
 
-The full reference covers every Question kind, Engine options, caching, persistence and replay, queues, Review, Calibration reports, events, logging and the test fakes: **[robertogallea.github.io/laravel-judgment](https://robertogallea.github.io/laravel-judgment/)**. Design decisions are recorded in [`docs/adr`](docs/adr).
+The full reference covers every Question kind, Engine options, caching, persistence and replay, queues, Review, Calibration reports, events, logging and the test fakes: **[robertogallea.github.io/laravel-judgment](https://robertogallea.github.io/laravel-judgment/)**. Design decisions are recorded in [`docs/adr`](docs/adr), and changes between releases in the [changelog](CHANGELOG.md).
 
 ## Package development
 

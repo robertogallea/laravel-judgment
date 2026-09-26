@@ -6,6 +6,7 @@ use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Events\AssessmentAwaitingReview;
 use RobertoGallea\Judgment\Facades\Judge;
 use RobertoGallea\Judgment\Judgment;
+use RobertoGallea\Judgment\Models\AssessmentRecord;
 use RobertoGallea\Judgment\Tests\Fixtures\ProductReview;
 use RobertoGallea\Judgment\Tests\Fixtures\RefundAbuse;
 use RobertoGallea\Judgment\Tests\Fixtures\RefundOutcome;
@@ -44,13 +45,14 @@ it('fails assertAwaitingReview for another Judgment', function () {
     Judge::assertAwaitingReview(ProductReview::class);
 })->throws(AssertionFailedError::class, 'Expected '.ProductReview::class.' to await Review, but it did not.');
 
-it('announces Review from a faked assessment, without a record', function () {
+it('announces Review from a faked assessment, with its record', function () {
     Event::fake([AssessmentAwaitingReview::class]);
     Judge::fake([RefundAbuse::class => ['abusive' => .40]]);
 
     refundAbuse()->assess()->outcome();
 
-    Event::assertDispatched(AssessmentAwaitingReview::class, fn (AssessmentAwaitingReview $event) => $event->record === null
+    Event::assertDispatched(AssessmentAwaitingReview::class, fn (AssessmentAwaitingReview $event) => $event->record?->is(AssessmentRecord::sole()) === true
+        && $event->record->isAwaitingReview()
         && $event->outcome === RefundOutcome::Escalate);
 });
 
