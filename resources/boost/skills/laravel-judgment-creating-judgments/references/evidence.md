@@ -41,6 +41,8 @@ public function language(): ?string
 }
 ```
 
+`language()` is never sent to the Engine. When the Engine should see the language, add it to `evidence()` as a plain key, e.g. `'language' => $this->refund->locale`. It then becomes part of the Evidence fingerprint, so the cache and Calibration stay correct.
+
 ## Queued assessment
 
 A dispatched Judgment serialises the Eloquent models in its properties by reference and reloads them when the job runs, so `evidence()` reads the Subject as it is then. Load the relations and counts the Decision reads (such as a `withCount()` column) with the Subject before assessing or dispatching.

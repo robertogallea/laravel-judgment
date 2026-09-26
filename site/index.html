@@ -570,6 +570,17 @@ JUDGMENT_LAYA_ALLOW_ALIASES=true
     return $this-&gt;refund-&gt;locale;
 }
 </code></pre>
+<p>The language is metadata: it is recorded with each Assessment and surfaced by <a href="#calibration">Calibration</a>, but it is never sent to the Engine (<a href="https://github.com/robertogallea/laravel-judgment/blob/main/docs/adr/0010-v1-scope-and-identity.md">ADR-0010</a>). When the Engine should see it, declare it as trusted Evidence alongside the rest:</p>
+<pre><code class="language-php">public function evidence(): array
+{
+    return [
+        'language' =&gt; $this-&gt;refund-&gt;locale,
+        'order' =&gt; ['item' =&gt; $this-&gt;refund-&gt;item, 'amount_eur' =&gt; $this-&gt;refund-&gt;amount],
+        'request' =&gt; ['explanation' =&gt; Evidence::untrusted($this-&gt;refund-&gt;explanation)],
+    ];
+}
+</code></pre>
+<p>The language is then part of the Evidence fingerprint, so the <a href="#caching">cache</a> never serves an answer given for another language, and Calibration cases carry it with the rest of the Evidence. Adding it to an existing Judgment changes the fingerprint of every Evidence, so the cache misses once for each.</p>
 <p>Add <code>HasAssessments</code> to the Subject’s model to reach its records:</p>
 <pre><code class="language-php">use RobertoGallea\Judgment\Concerns\HasAssessments;
 
