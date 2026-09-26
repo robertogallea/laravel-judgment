@@ -74,7 +74,7 @@ it('announces Review once, however often the record is decided again', function 
     Event::assertDispatchedTimes(AssessmentAwaitingReview::class, 1);
 });
 
-it('announces no Review for an Outcome that does not require it, or for a what-if', function () {
+it('announces no Review for an Outcome that does not require it, or for a Replay', function () {
     Event::fake([AssessmentAwaitingReview::class]);
 
     returnAbuse()->assess()->outcome();

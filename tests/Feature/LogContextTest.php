@@ -10,6 +10,7 @@ use RobertoGallea\Judgment\Tests\Fixtures\FakeEngine;
 use RobertoGallea\Judgment\Tests\Fixtures\RefundAbuse;
 use RobertoGallea\Judgment\Tests\Fixtures\RefundDecision;
 use RobertoGallea\Judgment\Tests\Fixtures\StrictRefundDecision;
+use RobertoGallea\Judgment\Tests\Fixtures\StrictReturnDecision;
 
 beforeEach(fn () => Log::spy());
 
@@ -114,4 +115,32 @@ it('writes no log entries when logging is turned off', function () {
     refundAbuse()->assess()->outcome();
 
     Log::shouldNotHaveReceived('info');
+});
+
+it('logs no decision for a Replay', function () {
+    returnAbuse()->assess();
+
+    AssessmentRecord::sole()->assessment()->decide(new StrictReturnDecision);
+
+    Log::shouldNotHaveReceived('info', ['Judgment decided.', Mockery::any()]);
+});
+
+it('logs the Outcome of an Assessment it did not record', function () {
+    config(['judgment.persistence.enabled' => false]);
+    app()->instance(Engine::class, new FakeEngine(['abusive' => .80]));
+
+    refundAbuse()->assess()->outcome();
+
+    Log::shouldHaveReceived('info')->with('Judgment decided.', Mockery::subset(['outcome' => 'reject']))->once();
+});
+
+it('logs the Outcome decided through the record', function () {
+    returnAbuse()->assess();
+    $record = AssessmentRecord::sole();
+
+    $record->outcome();
+    $record->decide(new StrictReturnDecision);
+
+    Log::shouldHaveReceived('info')->with('Judgment decided.', Mockery::subset(['outcome' => 'approve']))->once();
+    Log::shouldHaveReceived('info')->with('Judgment decided.', Mockery::subset(['decision' => StrictReturnDecision::class, 'outcome' => 'reject']))->once();
 });

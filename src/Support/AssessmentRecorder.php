@@ -138,6 +138,15 @@ final class AssessmentRecorder
     }
 
     /**
+     * Whether deciding the Assessment counts: one a Judge produced, recorded or not, or one linked
+     * to its record for a single decision. Any other, a Replay or an Assessment::fake(), records, announces and logs nothing.
+     */
+    public function linked(Assessment $assessment): bool
+    {
+        return isset($this->records[$assessment]);
+    }
+
+    /**
      * Store the Decision last applied to a Judge's Assessment, its version if it declares one,
      * and its Outcome; an Outcome requiring Review puts the record in Review, announced once.
      * From then on the record keeps that Outcome, for the reviewer to resolve.
@@ -150,7 +159,7 @@ final class AssessmentRecorder
         if (isset($this->unrecorded[$assessment])) {
             throw AssessmentNotRecorded::forOutcome($assessment, $outcome, $this->unrecorded[$assessment]);
         }
-        if (! isset($this->records[$assessment])) {
+        if (! $this->linked($assessment)) {
             return;
         }
 

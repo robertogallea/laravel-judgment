@@ -175,7 +175,7 @@ class AssessmentRecord extends Model
         return $this->morphTo();
     }
 
-    /** The rebuilt Assessment, linked for a single decision so a what-if never records. */
+    /** The rebuilt Assessment, linked for a single decision, so a Replay never records. */
     private function linked(?Judgment $judgment): Assessment
     {
         return app(AssessmentRecorder::class)->link($this->assessment($judgment), $this);

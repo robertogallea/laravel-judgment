@@ -602,7 +602,7 @@ $assessment = $record-&gt;assessment(new RefundAbuse($refund)); // or over a Jud
 
 $assessment-&gt;decide(new StrictRefundDecision());
 </code></pre>
-<p>A rebuilt Assessment is not linked to its record, so deciding it never overwrites the recorded Outcome. Rebuilding throws <code>UnrebuildableAssessment</code> in three cases: the record belongs to another Judgment, the Judgment’s Questions have changed since it was recorded (the fingerprints differ), or there is no Subject to construct the Judgment with.</p>
+<p>Deciding a rebuilt Assessment is a <strong>Replay</strong>: it is not linked to its record, so it never overwrites the recorded Outcome, fires no event, never starts Review and writes no <code>Judgment decided.</code> log entry. To record an Outcome on the record, call <code>$record-&gt;outcome()</code> or <code>$record-&gt;decide()</code> instead. Rebuilding throws <code>UnrebuildableAssessment</code> in three cases: the record belongs to another Judgment, the Judgment’s Questions have changed since it was recorded (the fingerprints differ), or there is no Subject to construct the Judgment with.</p>
 
 <h3 id="persistence-configuration">Configuration and pruning</h3>
 <p>Persistence is configured under <code>judgment.persistence</code>:</p>
@@ -684,14 +684,14 @@ Judge::dispatch(new RefundAbuse($refund));
   <tbody>
     <tr><td>The same process as <code>assess()</code></td><td><code>$assessment->outcome()</code> / <code>->decide()</code></td><td>yes</td></tr>
     <tr><td>Across a queue boundary</td><td><code>$record->outcome()</code> / <code>->decide()</code></td><td>yes</td></tr>
-    <tr><td>What-if or Calibration</td><td><code>$record->assessment()->decide()</code></td><td>no</td></tr>
+    <tr><td><a href="#replaying-an-assessment">Replay</a> or Calibration</td><td><code>$record->assessment()->decide()</code></td><td>no</td></tr>
   </tbody>
 </table></div>
 <p>Like <code>assessment()</code>, the record’s <code>outcome()</code> and <code>decide()</code> take an optional Judgment to rebuild over.</p>
 
 <h2 id="review-and-resolution">Review and Resolution</h2>
 <p>An Outcome whose <code>requiresReview()</code> returns true, like <code>RefundOutcome::Escalate</code> in <a href="#deciding">Deciding</a>, needs a person to decide before its Action is taken.</p>
-<p>When a recorded Decision yields such an Outcome (through <code>outcome()</code> or <code>decide()</code>, as in the <a href="#deciding-after-the-queue">table above</a>), the record enters Review and <code>AssessmentAwaitingReview</code> fires. A record enters Review once, even when two copies of it are decided at the same moment. From then on it keeps the Outcome and Decision that sent it to Review: deciding it again records nothing and fires no event. A what-if on a rebuilt Assessment never starts Review. The package ships no review UI.</p>
+<p>When a recorded Decision yields such an Outcome (through <code>outcome()</code> or <code>decide()</code>, as in the <a href="#deciding-after-the-queue">table above</a>), the record enters Review and <code>AssessmentAwaitingReview</code> fires. A record enters Review once, even when two copies of it are decided at the same moment. From then on it keeps the Outcome and Decision that sent it to Review: deciding it again records nothing and fires no event. A <a href="#replaying-an-assessment">Replay</a> never starts Review. The package ships no review UI.</p>
 <p>The event carries <code>$judgment</code>, <code>$assessment</code>, <code>$outcome</code>, <code>$record</code> and <code>$requestedAt</code>. <code>$record</code> is null when persistence is off or under <code>Judge::fake()</code>, and a record is needed to resolve.</p>
 
 <h3 id="notifying-reviewers">Recipe: notifying reviewers</h3>
@@ -841,7 +841,7 @@ php artisan judgment:eval RefundAbuse --engine=jev --engine=jev-next    # compar
     <tr><td><code>Judgment assessed.</code></td><td>info</td><td><code>judgment</code>, <code>engine</code>, <code>model</code>, <code>request_id</code></td></tr>
     <tr><td><code>Judgment unassessed.</code></td><td>warning</td><td><code>judgment</code>, <code>exception</code>, plus <code>engine</code>, <code>model</code>, <code>request_id</code> when the Engine responded</td></tr>
     <tr><td><code>Judgment assessed from cache.</code></td><td>info</td><td>as <code>Judgment assessed.</code>, plus <code>cached_from</code>: the original record’s id</td></tr>
-    <tr><td><code>Judgment decided.</code></td><td>info</td><td><code>judgment</code>, <code>engine</code>, <code>model</code>, <code>request_id</code>, <code>decision</code>, <code>outcome</code></td></tr>
+    <tr><td><code>Judgment decided.</code></td><td>info</td><td><code>judgment</code>, <code>engine</code>, <code>model</code>, <code>request_id</code>, <code>decision</code>, <code>outcome</code>, when an Assessment a Judge produced is decided (persistence on or off), or one decided through <code>$record-&gt;outcome()</code> or <code>$record-&gt;decide()</code>; never for a <a href="#replaying-an-assessment">Replay</a> or an <code>Assessment::fake()</code>, nor for an Outcome refused as unrecorded</td></tr>
     <tr><td><code>Judgment not recorded.</code></td><td>warning</td><td><code>judgment</code>, <code>engine</code>, <code>model</code>, <code>request_id</code>, <code>exception</code>, when <a href="#when-recording-fails">recording is best-effort</a> and fails</td></tr>
   </tbody>
 </table></div>
