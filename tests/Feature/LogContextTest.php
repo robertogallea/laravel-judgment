@@ -1,8 +1,10 @@
 <?php
 
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 use Psr\Log\LoggerInterface;
 use RobertoGallea\Judgment\Contracts\Engine;
+use RobertoGallea\Judgment\Events\AssessmentDecided;
 use RobertoGallea\Judgment\Models\AssessmentRecord;
 use RobertoGallea\Judgment\Tests\Fixtures\CachedListingTone;
 use RobertoGallea\Judgment\Tests\Fixtures\FailingEngine;
@@ -143,4 +145,12 @@ it('logs the Outcome decided through the record', function () {
 
     Log::shouldHaveReceived('info')->with('Judgment decided.', Mockery::subset(['outcome' => 'approve']))->once();
     Log::shouldHaveReceived('info')->with('Judgment decided.', Mockery::subset(['decision' => StrictReturnDecision::class, 'outcome' => 'reject']))->once();
+});
+
+it('logs the Outcome even when a listener of the decision throws', function () {
+    Event::listen(AssessmentDecided::class, fn () => throw new RuntimeException('Action failed.'));
+    $assessment = returnAbuse()->assess();
+
+    expect(fn () => $assessment->outcome())->toThrow(RuntimeException::class, 'Action failed.');
+    Log::shouldHaveReceived('info')->with('Judgment decided.', Mockery::subset(['outcome' => 'approve']))->once();
 });

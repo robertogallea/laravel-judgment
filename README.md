@@ -38,7 +38,7 @@ final class RefundDecision implements Decision
 - **[Queued assessment](https://robertogallea.github.io/laravel-judgment/#queued-assessment)** and opt-in **[caching](https://robertogallea.github.io/laravel-judgment/#caching)**.
 - **[Calibration](https://robertogallea.github.io/laravel-judgment/#calibration)** of thresholds against labelled cases, with `judgment:eval` or [from code](https://robertogallea.github.io/laravel-judgment/#calibration-api).
 - **[Strict test fakes](https://robertogallea.github.io/laravel-judgment/#testing)**: `Assessment::fake()` and `Judge::fake()`, no Engine needed.
-- **[Coding-agent skills](https://robertogallea.github.io/laravel-judgment/#coding-agents-laravel-boost)** for Laravel Boost, plus [events and logging](https://robertogallea.github.io/laravel-judgment/#events-and-logging) for every assessment.
+- **[Coding-agent skills](https://robertogallea.github.io/laravel-judgment/#coding-agents-laravel-boost)** for Laravel Boost, plus [events and logging](https://robertogallea.github.io/laravel-judgment/#events-and-logging) for every assessment and [every decision](https://robertogallea.github.io/laravel-judgment/#acting-on-the-outcome).
 
 ## Use cases
 

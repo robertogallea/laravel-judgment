@@ -9,6 +9,7 @@ use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Contracts\Engine;
 use RobertoGallea\Judgment\Events\AssessmentAwaitingReview;
 use RobertoGallea\Judgment\Events\AssessmentCompleted;
+use RobertoGallea\Judgment\Events\AssessmentDecided;
 use RobertoGallea\Judgment\Exceptions\AssessmentNotRecorded;
 use RobertoGallea\Judgment\Tests\Fixtures\CachedListingTone;
 use RobertoGallea\Judgment\Tests\Fixtures\FakeEngine;
@@ -91,20 +92,21 @@ it('refuses an Outcome it cannot record', function () {
 });
 
 it('neither announces nor logs as decided an Outcome it cannot record', function () {
-    Event::fake([AssessmentAwaitingReview::class]);
+    Event::fake([AssessmentAwaitingReview::class, AssessmentDecided::class]);
     Log::spy();
     $assessment = returnAbuse()->assess();
     breakRecording();
 
     expect(fn () => $assessment->decide(new ReviewedReturnDecision))->toThrow(AssessmentNotRecorded::class);
     Event::assertNotDispatched(AssessmentAwaitingReview::class);
+    Event::assertNotDispatched(AssessmentDecided::class);
     Log::shouldNotHaveReceived('info', ['Judgment decided.', Mockery::any()]);
 });
 
-it('returns an Outcome it cannot record when recording is best-effort, still announcing Review', function () {
+it('returns an Outcome it cannot record when recording is best-effort, still announcing it and Review', function () {
     config(['judgment.persistence.required' => false]);
     Exceptions::fake();
-    Event::fake([AssessmentAwaitingReview::class]);
+    Event::fake([AssessmentAwaitingReview::class, AssessmentDecided::class]);
     $assessment = returnAbuse()->assess();
     breakRecording();
 
@@ -113,10 +115,13 @@ it('returns an Outcome it cannot record when recording is best-effort, still ann
     Event::assertDispatched(AssessmentAwaitingReview::class, fn (AssessmentAwaitingReview $event) => $event->assessment === $assessment
         && $event->outcome === RefundOutcome::Escalate
         && $event->record === null);
+    Event::assertDispatched(AssessmentDecided::class, fn (AssessmentDecided $event) => $event->assessment === $assessment
+        && $event->outcome === RefundOutcome::Escalate
+        && $event->record === null);
 });
 
 it('refuses to decide the Assessment it could not record', function () {
-    Event::fake([AssessmentAwaitingReview::class]);
+    Event::fake([AssessmentAwaitingReview::class, AssessmentDecided::class]);
     $judgment = returnAbuse();
     breakRecording();
 
@@ -126,6 +131,7 @@ it('refuses to decide the Assessment it could not record', function () {
     } catch (AssessmentNotRecorded $e) {
         expect(fn () => $e->assessment->decide(new ReviewedReturnDecision))->toThrow(AssessmentNotRecorded::class);
         Event::assertNotDispatched(AssessmentAwaitingReview::class);
+        Event::assertNotDispatched(AssessmentDecided::class);
     }
 });
 

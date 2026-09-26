@@ -22,7 +22,6 @@ use RobertoGallea\Judgment\Questions\LikelihoodSet;
 use RobertoGallea\Judgment\Questions\Question;
 use RobertoGallea\Judgment\Questions\Rating;
 use RobertoGallea\Judgment\Support\AssessmentRecorder;
-use RobertoGallea\Judgment\Support\JudgmentLog;
 use RobertoGallea\Judgment\Testing\FakeAssessment;
 
 /** The recorded answers to a Judgment's Questions: probabilistic, immutable, free of consequence. */
@@ -99,12 +98,7 @@ final class Assessment
             throw ImpureDecision::for($decision, $outcome, $again);
         }
 
-        // Recorded first: an Outcome that must be recorded and cannot be is never logged as decided, nor is a Replay.
-        $recorder = app(AssessmentRecorder::class);
-        $recorder->decided($this, $decision, $outcome);
-        if ($recorder->linked($this)) {
-            app(JudgmentLog::class)->decided($this, $decision, $outcome);
-        }
+        app(AssessmentRecorder::class)->decided($this, $decision, $outcome);
 
         return $outcome;
     }

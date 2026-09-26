@@ -660,7 +660,7 @@ $assessment-&gt;decide(new StrictRefundDecision());
 </code></pre>
 <p>Deciding <code>$e->assessment</code> throws <code>AssessmentNotRecorded</code> too, so its Outcome is never acted on either.</p>
 <p>This applies to Assessments. A <a href="#recorded-failures">failed attempt</a> is always recorded best-effort.</p>
-<p>Set <code>JUDGMENT_PERSIST_REQUIRED=false</code> to make auditing best-effort and keep working through a database outage. A recording failure is then passed to <code>report()</code> and logged as <code>Judgment not recorded.</code>, and <code>assess()</code> returns the Assessment as usual. <code>AssessmentCompleted</code> and <code>AssessmentAwaitingReview</code> still fire, with a null <code>$record</code>. The audit trail has a gap for each such failure.</p>
+<p>Set <code>JUDGMENT_PERSIST_REQUIRED=false</code> to make auditing best-effort and keep working through a database outage. A recording failure is then passed to <code>report()</code> and logged as <code>Judgment not recorded.</code>, and <code>assess()</code> returns the Assessment as usual. <code>AssessmentCompleted</code>, <code>AssessmentDecided</code> and <code>AssessmentAwaitingReview</code> still fire, with a null <code>$record</code>. The audit trail has a gap for each such failure.</p>
 
 <h2 id="queued-assessment">Queued assessment</h2>
 
@@ -715,9 +715,30 @@ Judge::dispatch(new RefundAbuse($refund));
 </table></div>
 <p>Like <code>assessment()</code>, the record’s <code>outcome()</code> and <code>decide()</code> take an optional Judgment to rebuild over.</p>
 
+<h3 id="acting-on-the-outcome">Acting on the Outcome</h3>
+<p>Every decision that counts fires <code>RobertoGallea\Judgment\Events\AssessmentDecided</code>, so the Action for an Outcome lives in one listener, whether the Judgment was assessed sync or queued. It fires for <code>$assessment-&gt;outcome()</code> / <code>-&gt;decide()</code> on an Assessment a Judge produced, and for <code>$record-&gt;outcome()</code> / <code>-&gt;decide()</code>: the first two rows of the table above. It never fires for a <a href="#replaying-an-assessment">Replay</a>, an <code>Assessment::fake()</code>, or an Outcome refused because it <a href="#when-recording-fails">cannot be recorded</a>.</p>
+<pre><code class="language-php">use RobertoGallea\Judgment\Events\AssessmentDecided;
+
+final class RefundOnApproval implements ShouldQueue
+{
+    public function handle(AssessmentDecided $event): void
+    {
+        if ($event-&gt;outcome-&gt;requiresReview() || $event-&gt;record?-&gt;isAwaitingReview()) {
+            return; // a person decides: act on AssessmentResolved instead
+        }
+
+        match ($event-&gt;outcome) {
+            RefundOutcome::Approve =&gt; $event-&gt;judgment-&gt;refund-&gt;approve(),
+            RefundOutcome::Reject =&gt; $event-&gt;judgment-&gt;refund-&gt;reject(),
+        };
+    }
+}
+</code></pre>
+<p>The event carries <code>$judgment</code>, <code>$assessment</code>, <code>$decision</code>, <code>$outcome</code> and <code>$record</code>. <code>$record</code> is null when persistence is off, best-effort recording failed, or under <code>Judge::fake()</code>. It serialises like <code>AssessmentCompleted</code>, so the listener can be queued; the record comes back fresh from the database. An Outcome that requires Review fires <code>AssessmentAwaitingReview</code> as well, not instead. The event fires once per decision, so deciding the same Assessment twice fires it twice: keep the Action idempotent. A record already in Review keeps the Outcome that sent it there whatever a later Decision yields, which is why the listener above also checks <code>isAwaitingReview()</code>. That check needs a record: with a null <code>$record</code>, an Assessment decided again after its Outcome required Review announces the new Outcome with nothing to show the earlier one, so decide it once.</p>
+
 <h2 id="review-and-resolution">Review and Resolution</h2>
 <p>An Outcome whose <code>requiresReview()</code> returns true, like <code>RefundOutcome::Escalate</code> in <a href="#deciding">Deciding</a>, needs a person to decide before its Action is taken.</p>
-<p>When a recorded Decision yields such an Outcome (through <code>outcome()</code> or <code>decide()</code>, as in the <a href="#deciding-after-the-queue">table above</a>), the record enters Review and <code>AssessmentAwaitingReview</code> fires. A record enters Review once, even when two copies of it are decided at the same moment. From then on it keeps the Outcome and Decision that sent it to Review: deciding it again records nothing and fires no event. A <a href="#replaying-an-assessment">Replay</a> never starts Review. The package ships no review UI.</p>
+<p>When a recorded Decision yields such an Outcome (through <code>outcome()</code> or <code>decide()</code>, as in the <a href="#deciding-after-the-queue">table above</a>), the record enters Review and <code>AssessmentAwaitingReview</code> fires. A record enters Review once, even when two copies of it are decided at the same moment. From then on it keeps the Outcome and Decision that sent it to Review: deciding it again records nothing and fires no further <code>AssessmentAwaitingReview</code>, only the <a href="#acting-on-the-outcome"><code>AssessmentDecided</code></a> every decision fires. A <a href="#replaying-an-assessment">Replay</a> never starts Review. The package ships no review UI.</p>
 <p>The event carries <code>$judgment</code>, <code>$assessment</code>, <code>$outcome</code>, <code>$record</code> and <code>$requestedAt</code>. <code>$record</code> is null when persistence is off or under <code>Judge::fake()</code>, and a record is needed to resolve.</p>
 
 <h3 id="notifying-reviewers">Recipe: notifying reviewers</h3>
@@ -887,6 +908,7 @@ foreach ($report-&gt;results as $result) {
   <li><code>RobertoGallea\Judgment\Events\AssessmentCompleted</code>, with <code>$judgment</code>, <code>$assessment</code> and <code>$record</code> (the <code>AssessmentRecord</code>, or null when persistence is off, best-effort recording failed, or under <code>Judge::fake()</code>)</li>
   <li><code>RobertoGallea\Judgment\Events\AssessmentFailed</code>, with <code>$judgment</code>, <code>$exception</code> and <code>$record</code> (the <a href="#recorded-failures">recorded failed attempt</a>, or null when persistence is off, the write failed, or under <code>Judge::fake()</code>), whether or not the failure is thrown</li>
 </ul>
+<p>Every decision that counts fires <code>RobertoGallea\Judgment\Events\AssessmentDecided</code>, with <code>$judgment</code>, <code>$assessment</code>, <code>$decision</code>, <code>$outcome</code> and <code>$record</code>, never for a Replay (see <a href="#acting-on-the-outcome">Acting on the Outcome</a>).</p>
 <p>The Review lifecycle fires two more: <code>AssessmentAwaitingReview</code> and <code>AssessmentResolved</code> (see <a href="#review-and-resolution">Review and Resolution</a>).</p>
 <p>The package also writes log entries you can trace an assessment by:</p>
 <div class="table-wrap"><table>
@@ -987,7 +1009,7 @@ Judge::assertNothingAssessed();
 <pre><code class="language-php">Judge::assertAwaitingReview(RefundAbuse::class);
 Judge::assertAwaitingReview(RefundAbuse::class, fn (RefundAbuse $judgment, RefundOutcome $outcome) =&gt; $outcome === RefundOutcome::Escalate);
 </code></pre>
-<p>A faked Assessment is not recorded, so it cannot be resolved. <code>AssessmentAwaitingReview</code> still fires, with a null <code>$record</code>. A Decision unit test on <code>Assessment::fake()</code> never enters Review.</p>
+<p>A faked Assessment is not recorded, so it cannot be resolved. <code>AssessmentDecided</code> and <code>AssessmentAwaitingReview</code> still fire, with a null <code>$record</code>. A Decision unit test on <code>Assessment::fake()</code> never enters Review.</p>
 <p>The fake dispatches Judgments through the queue like the Judge. On the sync queue the job runs and the fake answers from its script. Under <code>Queue::fake()</code> nothing runs. Either way you can assert what was dispatched:</p>
 <pre><code class="language-php">Judge::assertDispatched(RefundAbuse::class);
 Judge::assertDispatched(RefundAbuse::class, fn (RefundAbuse $judgment) =&gt; $judgment-&gt;refund-&gt;is($refund));

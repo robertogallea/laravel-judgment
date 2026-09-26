@@ -15,6 +15,7 @@ use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Contracts\Decision;
 use RobertoGallea\Judgment\Contracts\Outcome;
 use RobertoGallea\Judgment\Events\AssessmentAwaitingReview;
+use RobertoGallea\Judgment\Events\AssessmentDecided;
 use RobertoGallea\Judgment\Exceptions\AssessmentNotRecorded;
 use RobertoGallea\Judgment\Exceptions\EngineFailed;
 use RobertoGallea\Judgment\Exceptions\UnassessedNotRecorded;
@@ -202,14 +203,14 @@ final class AssessmentRecorder
      * Whether deciding the Assessment counts: one a Judge produced, recorded or not, or one linked
      * to its record for a single decision. Any other, a Replay or an Assessment::fake(), records, announces and logs nothing.
      */
-    public function linked(Assessment $assessment): bool
+    private function linked(Assessment $assessment): bool
     {
         return isset($this->records[$assessment]);
     }
 
     /**
      * Store the Decision last applied to a Judge's Assessment, its version if it declares one,
-     * and its Outcome; an Outcome requiring Review puts the record in Review, announced once.
+     * and its Outcome, logging and announcing the decision; an Outcome requiring Review puts the record in Review, announced once.
      * From then on the record keeps that Outcome, for the reviewer to resolve.
      *
      * @throws AssessmentNotRecorded when the Outcome could not be written, or the Assessment was refused unrecorded,
@@ -240,14 +241,18 @@ final class AssessmentRecorder
                 $record = null;
             }
         }
-        if (! $entersReview) {
-            return;
+
+        // Logged once recorded, so an Outcome refused as unrecorded is never logged as decided, and before
+        // any listener runs, so one that throws cannot hide a decision from the log.
+        $this->log->decided($assessment, $decision, $outcome);
+        if ($entersReview) {
+            $this->awaiting[$assessment] = $outcome;
+            $this->events->dispatch(new AssessmentAwaitingReview(
+                $assessment->judgment, $assessment, $outcome, $record, $record->review_requested_at ?? now()->toImmutable(),
+            ));
         }
 
-        $this->awaiting[$assessment] = $outcome;
-        $this->events->dispatch(new AssessmentAwaitingReview(
-            $assessment->judgment, $assessment, $outcome, $record, $record->review_requested_at ?? now()->toImmutable(),
-        ));
+        $this->events->dispatch(new AssessmentDecided($assessment->judgment, $assessment, $decision, $outcome, $record));
     }
 
     /** The Outcome that put one of the Judge's Assessments in Review, if a Decision applied here did. */

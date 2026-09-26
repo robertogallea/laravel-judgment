@@ -124,5 +124,5 @@ Tell the user:
 
 - the files written and which Outcomes require Review;
 - each placeholder arm left, and each stated threshold that is not calibrated;
-- how to act on it: `$assessment->outcome()` on the Assessment `assess()` returned, or `$event->record?->outcome()` in a queued listener of `AssessmentCompleted`; both record the Outcome and start Review when it requires one;
+- how to act on it: `$assessment->outcome()` on the Assessment `assess()` returned, or `$event->record?->outcome()` in a queued listener of `AssessmentCompleted`; both record the Outcome, start Review when it requires one, and fire `AssessmentDecided`, where the application performs its Action;
 - that thresholds are best set from labelled cases with `php artisan judgment:eval {Judgment}`, which you can help with by drafting a dataset from their examples and reading the report they paste back.
