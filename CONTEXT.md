@@ -53,7 +53,7 @@ The record of which Engine connection, model version and engine request produced
 _Avoid_: Metadata, raw result
 
 **Unassessed**:
-The state of a Judgment whose Engine failed to produce an Assessment; never silently mapped to an Outcome.
+The state of a Judgment whose Engine failed to produce an Assessment; never silently mapped to an Outcome. Recorded like an Assessment, with why the Engine failed, but never with answers or an Outcome.
 _Avoid_: Default outcome, fallback
 
 **Judgment**:
@@ -78,9 +78,17 @@ _Avoid_: Moderation, approval queue, escalation
 The final Outcome recorded by a human reviewer, kept alongside the automatic Outcome it may overturn.
 _Avoid_: Override, manual decision
 
+**Replay**:
+Applying a Decision to an Assessment rebuilt from its record; it records, announces and logs nothing, and never starts Review.
+_Avoid_: What-if, re-decide
+
 **Calibration**:
 Measuring a Judgment and its Decision against labelled cases (typically past Resolutions) to set and verify thresholds.
 _Avoid_: Eval, benchmark, training
+
+**Calibration Identity**:
+The Questions fingerprint, model version, Decision and its version, and Evidence language that Calibration never mixes; each Calibration result belongs to exactly one.
+_Avoid_: Group, bucket
 
 **Action**:
 The side effect an application performs for an Outcome; outside the package's responsibility.
