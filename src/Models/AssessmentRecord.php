@@ -16,6 +16,7 @@ use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Contracts\Decision;
 use RobertoGallea\Judgment\Contracts\Outcome;
 use RobertoGallea\Judgment\Events\AssessmentResolved;
+use RobertoGallea\Judgment\Exceptions\EngineFailed;
 use RobertoGallea\Judgment\Exceptions\InvalidResolution;
 use RobertoGallea\Judgment\Exceptions\UnrebuildableAssessment;
 use RobertoGallea\Judgment\Judgment;
@@ -23,7 +24,8 @@ use RobertoGallea\Judgment\Support\AssessmentRecorder;
 
 /**
  * The stored record of an Assessment (ADR-0003), kept apart from the immutable
- * Assessment value (ADR-0009) with what audit, replay and Calibration need.
+ * Assessment value (ADR-0009) with what audit, replay and Calibration need, or of
+ * an Unassessed attempt, with why the Engine failed but no answers (ADR-0014).
  *
  * @property int $id
  * @property class-string<Judgment> $judgment
@@ -32,11 +34,13 @@ use RobertoGallea\Judgment\Support\AssessmentRecorder;
  * @property list<string> $untrusted_paths
  * @property ?string $language
  * @property string $questions_fingerprint
- * @property array<string, mixed> $answers
- * @property string $engine
- * @property string $model
+ * @property ?array<string, mixed> $answers null for an Unassessed attempt
+ * @property ?string $engine null for an Unassessed attempt the Engine never responded to
+ * @property ?string $model
  * @property ?string $request_id
- * @property array<string, mixed> $provenance_details
+ * @property ?array<string, mixed> $provenance_details
+ * @property ?class-string<EngineFailed> $failure_type why the Engine failed, for an Unassessed attempt
+ * @property ?string $failure_message
  * @property ?int $cached_from_id
  * @property ?class-string<Decision> $decision
  * @property ?string $decision_version
@@ -63,6 +67,10 @@ class AssessmentRecord extends Model
      */
     public function assessment(?Judgment $judgment = null): Assessment
     {
+        if ($this->isUnassessed()) {
+            throw UnrebuildableAssessment::unassessed($this);
+        }
+
         $judgment ??= $this->subject === null
             ? throw UnrebuildableAssessment::noSubject($this)
             : new $this->judgment($this->subject);
@@ -119,6 +127,34 @@ class AssessmentRecord extends Model
         }
 
         event(new AssessmentResolved($this, $resolution::from((string) $this->outcome), $resolution, $reviewer));
+    }
+
+    /** Whether the record is of an attempt the Engine failed: it holds why, and never answers or an Outcome. */
+    public function isUnassessed(): bool
+    {
+        return $this->failure_type !== null;
+    }
+
+    /**
+     * Records of Assessments, with answers.
+     *
+     * @param  Builder<static>  $query
+     */
+    #[Scope]
+    protected function answered(Builder $query): void
+    {
+        $query->whereNull('failure_type');
+    }
+
+    /**
+     * Records of Unassessed attempts, with why the Engine failed.
+     *
+     * @param  Builder<static>  $query
+     */
+    #[Scope]
+    protected function unassessed(Builder $query): void
+    {
+        $query->whereNotNull('failure_type');
     }
 
     /** Whether the record's Outcome requires Review and no Resolution has been recorded yet. */

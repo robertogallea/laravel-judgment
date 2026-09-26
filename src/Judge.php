@@ -52,9 +52,9 @@ class Judge implements JudgeContract
             $response = $engine->answer($request);
             $this->ensureEveryQuestionIsAnswered($judgment, $request, $response);
         } catch (EngineFailed $e) {
-            return $this->fail($judgment, $e, $response);
+            return $this->fail($judgment, $e, $response, $questions, $request->evidence);
         } catch (Exception $e) {
-            return $this->fail($judgment, EngineFailed::for($judgment, $e), $response);
+            return $this->fail($judgment, EngineFailed::for($judgment, $e), $response, $questions, $request->evidence);
         }
 
         $answers = $this->regroup($questions, $response->answers);
@@ -115,17 +115,24 @@ class Judge implements JudgeContract
         return AssessJudgment::dispatch($judgment);
     }
 
-    /** Announce and log the failure, then throw it or end Unassessed, as configured. */
-    private function fail(Judgment $judgment, EngineFailed $exception, ?EngineResponse $response): Unassessed
+    /**
+     * Record the failed attempt, announce and log it, then throw it or end Unassessed, as configured.
+     *
+     * @param  array<string, Question|LikelihoodSet>  $questions  as declared
+     * @param  array<string, mixed>  $evidence  as the Engine was asked
+     */
+    private function fail(Judgment $judgment, EngineFailed $exception, ?EngineResponse $response, array $questions, array $evidence): Unassessed
     {
-        $this->container->make(Dispatcher::class)->dispatch(new AssessmentFailed($judgment, $exception));
+        $record = $this->container->make(AssessmentRecorder::class)->recordFailure($judgment, $exception, $response?->provenance, $questions, $evidence);
+
+        $this->container->make(Dispatcher::class)->dispatch(new AssessmentFailed($judgment, $exception, $record));
         $this->container->make(JudgmentLog::class)->unassessed($judgment, $exception, $response?->provenance);
 
         if ($this->container->make('config')->get('judgment.throw_on_failure')) {
             throw $exception;
         }
 
-        return new Unassessed($judgment, $exception);
+        return new Unassessed($judgment, $exception, $record);
     }
 
     /**

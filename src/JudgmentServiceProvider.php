@@ -33,19 +33,24 @@ class JudgmentServiceProvider extends ServiceProvider
                 __DIR__.'/../config/judgment.php' => config_path('judgment.php'),
             ], 'judgment-config');
 
+            // Timestamped a second apart, so a fresh install creates the table before altering it.
             $this->publishes([
                 __DIR__.'/../database/migrations/create_judgment_assessments_table.php.stub' => $this->migrationPath('create_judgment_assessments_table'),
+                __DIR__.'/../database/migrations/add_failures_to_judgment_assessments_table.php.stub' => $this->migrationPath('add_failures_to_judgment_assessments_table', afterSeconds: 1),
             ], 'judgment-migrations');
 
             $this->commands([MakeJudgmentCommand::class, MakeDecisionCommand::class, CalibrateCommand::class]);
         }
     }
 
-    /** The published migration if there is one, so republishing overwrites it, otherwise a new one timestamped now. */
-    private function migrationPath(string $name): string
+    /**
+     * The published migration if there is one, so republishing overwrites it, otherwise a new one
+     * timestamped that many seconds from now, so migrations published together run in order.
+     */
+    private function migrationPath(string $name, int $afterSeconds = 0): string
     {
         $published = glob(database_path("migrations/*_{$name}.php")) ?: [];
 
-        return $published[0] ?? database_path('migrations/'.date('Y_m_d_His').'_'.$name.'.php');
+        return $published[0] ?? database_path('migrations/'.date('Y_m_d_His', time() + $afterSeconds).'_'.$name.'.php');
     }
 }

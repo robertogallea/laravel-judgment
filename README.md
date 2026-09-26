@@ -32,7 +32,7 @@ final class RefundDecision implements Decision
 - **[Pure Decisions](https://robertogallea.github.io/laravel-judgment/#deciding)** you own, mapping answers and Subject facts to a backed-enum Outcome.
 - **[Untrusted Evidence](https://robertogallea.github.io/laravel-judgment/#untrusted-evidence)**: end-user text is assessed as a claim, never followed as instructions.
 - **[Engines](https://robertogallea.github.io/laravel-judgment/#engines)**: TypeSafe's hosted Jev, a self-hosted Laya server, or your own Engine, with pinned models.
-- **[Failures as data](https://robertogallea.github.io/laravel-judgment/#when-the-engine-fails)**: an Engine failure is thrown or returned as `Unassessed`, never turned into a default Outcome.
+- **[Failures as data](https://robertogallea.github.io/laravel-judgment/#when-the-engine-fails)**: an Engine failure is thrown or returned as `Unassessed`, never turned into a default Outcome, and each failed attempt is recorded.
 - **[Audited Assessments](https://robertogallea.github.io/laravel-judgment/#persisted-assessments)**: Evidence, answers, Provenance and Outcome recorded, and replayable under another Decision.
 - **[Review and Resolution](https://robertogallea.github.io/laravel-judgment/#review-and-resolution)**: uncertain Outcomes go to a person, whose Resolution is recorded next to the automatic one.
 - **[Queued assessment](https://robertogallea.github.io/laravel-judgment/#queued-assessment)** and opt-in **[caching](https://robertogallea.github.io/laravel-judgment/#caching)**.

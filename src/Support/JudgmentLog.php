@@ -10,6 +10,7 @@ use RobertoGallea\Judgment\Contracts\Decision;
 use RobertoGallea\Judgment\Contracts\Outcome;
 use RobertoGallea\Judgment\Exceptions\AssessmentNotRecorded;
 use RobertoGallea\Judgment\Exceptions\EngineFailed;
+use RobertoGallea\Judgment\Exceptions\UnassessedNotRecorded;
 use RobertoGallea\Judgment\Judgment;
 use RobertoGallea\Judgment\Provenance;
 
@@ -52,6 +53,20 @@ final class JudgmentLog
     public function notRecorded(AssessmentNotRecorded $exception): void
     {
         $this->channel()?->warning('Judgment not recorded.', [...$exception->assessment->logContext(), 'exception' => $exception]);
+    }
+
+    /**
+     * Warned when an Unassessed attempt could not be recorded, leaving a gap in the audit trail.
+     *
+     * @param  Provenance|null  $provenance  known when the Engine responded but the response was unusable
+     */
+    public function unassessedNotRecorded(UnassessedNotRecorded $exception, ?Provenance $provenance): void
+    {
+        $this->channel()?->warning('Judgment not recorded.', [
+            'judgment' => $exception->judgment::class,
+            ...$provenance?->logContext() ?? [],
+            'exception' => $exception,
+        ]);
     }
 
     public function decided(Assessment $assessment, Decision $decision, Outcome $outcome): void

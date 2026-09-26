@@ -27,4 +27,9 @@ final class UnrebuildableAssessment extends LogicException
     {
         return new self(sprintf('Assessment record %d has no Subject to construct %s with: pass the Judgment to assessment().', $record->id, $record->judgment));
     }
+
+    public static function unassessed(AssessmentRecord $record): self
+    {
+        return new self(sprintf('Assessment record %d is an Unassessed attempt of %s: it has no answers to rebuild.', $record->id, $record->judgment));
+    }
 }

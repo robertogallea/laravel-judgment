@@ -16,6 +16,8 @@ use RobertoGallea\Judgment\Contracts\Decision;
 use RobertoGallea\Judgment\Contracts\Outcome;
 use RobertoGallea\Judgment\Events\AssessmentAwaitingReview;
 use RobertoGallea\Judgment\Exceptions\AssessmentNotRecorded;
+use RobertoGallea\Judgment\Exceptions\EngineFailed;
+use RobertoGallea\Judgment\Exceptions\UnassessedNotRecorded;
 use RobertoGallea\Judgment\Exceptions\UnrebuildableAssessment;
 use RobertoGallea\Judgment\Judgment;
 use RobertoGallea\Judgment\Models\AssessmentRecord;
@@ -26,6 +28,7 @@ use RobertoGallea\Judgment\Questions\LikelihoodSet;
 use RobertoGallea\Judgment\Questions\Question;
 use RobertoGallea\Judgment\Questions\Rating;
 use RobertoGallea\Judgment\UntrustedText;
+use Throwable;
 use WeakMap;
 
 /**
@@ -74,12 +77,7 @@ final class AssessmentRecorder
         }
 
         $record = new AssessmentRecord([
-            'judgment' => $assessment->judgment::class,
-            'evidence_fingerprint' => self::evidenceFingerprint($evidence),
-            'evidence' => $this->config->get('judgment.persistence.evidence') ? json_decode(self::json($evidence), true, flags: JSON_THROW_ON_ERROR) : null,
-            'untrusted_paths' => self::untrustedPaths($evidence),
-            'language' => $assessment->judgment->language(),
-            'questions_fingerprint' => self::fingerprint($questions),
+            ...$this->described($assessment->judgment, $questions, $evidence),
             'answers' => $this->encode($answers),
             'engine' => $assessment->provenance->engine,
             'model' => $assessment->provenance->model,
@@ -88,11 +86,7 @@ final class AssessmentRecorder
             'cached_from_id' => $cachedFrom,
         ]);
 
-        // An unsaved Subject has no key to link it by.
-        $subject = $assessment->judgment->subject();
-        if ($subject?->exists) {
-            $record->subject()->associate($subject);
-        }
+        $this->associate($record, $assessment->judgment);
 
         try {
             $record->save();
@@ -111,6 +105,73 @@ final class AssessmentRecorder
         }
 
         return $this->records[$assessment] = $record;
+    }
+
+    /**
+     * Record an Unassessed attempt: why the Engine failed and, when it responded with something
+     * unusable, its Provenance; never answers or an Outcome. Always best-effort, whatever
+     * judgment.persistence.required says, since an Unassessed result cannot be acted on (ADR-0014).
+     *
+     * @param  array<string, Question|LikelihoodSet>  $questions  as declared
+     * @param  array<string, mixed>  $evidence  as the Engine was asked
+     * @param  Provenance|null  $provenance  known when the Engine responded but the response was unusable
+     * @return AssessmentRecord|null null when judgment.persistence.enabled is off, or recording failed
+     */
+    public function recordFailure(Judgment $judgment, EngineFailed $failure, ?Provenance $provenance, array $questions, array $evidence): ?AssessmentRecord
+    {
+        if (! $this->config->get('judgment.persistence.enabled')) {
+            return null;
+        }
+
+        try {
+            $record = new AssessmentRecord([
+                ...$this->described($judgment, $questions, $evidence),
+                'engine' => $provenance?->engine,
+                'model' => $provenance?->model,
+                'request_id' => $provenance?->requestId,
+                'provenance_details' => $provenance?->details,
+                'failure_type' => $failure::class,
+                'failure_message' => $failure->getMessage(),
+            ]);
+            $this->associate($record, $judgment);
+            $record->save();
+        } catch (Throwable $e) {
+            // Even a bug here must not replace the Engine's failure the application has to handle.
+            report($exception = UnassessedNotRecorded::for($judgment, $failure, $e));
+            $this->log->unassessedNotRecorded($exception, $provenance);
+
+            return null;
+        }
+
+        return $record;
+    }
+
+    /**
+     * What every record holds of the Judgment, its Questions and the Evidence it was asked over.
+     *
+     * @param  array<string, Question|LikelihoodSet>  $questions
+     * @param  array<string, mixed>  $evidence
+     * @return array<string, mixed>
+     */
+    private function described(Judgment $judgment, array $questions, array $evidence): array
+    {
+        return [
+            'judgment' => $judgment::class,
+            'evidence_fingerprint' => self::evidenceFingerprint($evidence),
+            'evidence' => $this->config->get('judgment.persistence.evidence') ? json_decode(self::json($evidence), true, flags: JSON_THROW_ON_ERROR) : null,
+            'untrusted_paths' => self::untrustedPaths($evidence),
+            'language' => $judgment->language(),
+            'questions_fingerprint' => self::fingerprint($questions),
+        ];
+    }
+
+    /** Link the record to the Subject; an unsaved Subject has no key to link it by. */
+    private function associate(AssessmentRecord $record, Judgment $judgment): void
+    {
+        $subject = $judgment->subject();
+        if ($subject?->exists) {
+            $record->subject()->associate($subject);
+        }
     }
 
     /** Whether what cannot be recorded is refused rather than reported (ADR-0013). */
@@ -228,8 +289,10 @@ final class AssessmentRecorder
     public function rebuild(AssessmentRecord $record, Judgment $judgment): Assessment
     {
         $questions = $judgment->questions();
+        [$answers, $engine, $model] = [$record->answers, $record->engine, $record->model];
 
         match (true) {
+            $record->isUnassessed() || $answers === null || $engine === null || $model === null => throw UnrebuildableAssessment::unassessed($record),
             $judgment::class !== $record->judgment => throw UnrebuildableAssessment::otherJudgment($record, $judgment),
             self::fingerprint($questions) !== $record->questions_fingerprint => throw UnrebuildableAssessment::changedQuestions($record),
             default => null,
@@ -238,8 +301,8 @@ final class AssessmentRecorder
         return new Assessment(
             $judgment,
             $questions,
-            $this->decode($questions, $record->answers),
-            new Provenance($record->engine, $record->model, $record->request_id, $record->provenance_details),
+            $this->decode($questions, $answers),
+            new Provenance($engine, $model, $record->request_id, $record->provenance_details ?? []),
         );
     }
 
