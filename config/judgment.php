@@ -89,12 +89,17 @@ return [
     | Engine round, and the Jev driver already retries rate-limited and
     | overloaded requests, so a failed assessment is tried once by default.
     |
+    | A Judgment with a default Decision is then decided in a chained job on
+    | the same connection and queue, working on the record: a retry costs no
+    | Engine round, so a failed decision is tried three times by default.
+    |
     */
 
     'queue' => [
         'connection' => env('JUDGMENT_QUEUE_CONNECTION'),
         'queue' => env('JUDGMENT_QUEUE'),
         'tries' => env('JUDGMENT_QUEUE_TRIES', 1),
+        'decide_tries' => env('JUDGMENT_QUEUE_DECIDE_TRIES', 3),
     ],
 
     /*

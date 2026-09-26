@@ -199,6 +199,12 @@ final class AssessmentRecorder
         return $assessment;
     }
 
+    /** The record one of the Judge's Assessments was stored as, if it was. */
+    public function recordOf(Assessment $assessment): ?AssessmentRecord
+    {
+        return ($this->records[$assessment] ?? null) ?: null;
+    }
+
     /**
      * Whether deciding the Assessment counts: one a Judge produced, recorded or not, or one linked
      * to its record for a single decision. Any other, a Replay or an Assessment::fake(), records, announces and logs nothing.
@@ -225,7 +231,7 @@ final class AssessmentRecorder
             return;
         }
 
-        $record = $this->records[$assessment] ?: null;
+        $record = $this->recordOf($assessment);
         $entersReview = $outcome->requiresReview() && ! isset($this->awaiting[$assessment]);
         if ($record !== null) {
             try {

@@ -1,0 +1,9 @@
+# Queued Judgments are decided in a chained job
+
+Early users found that a dispatched Judgment was assessed but never decided: to record its Outcome, and start Review, the application had to write an `AssessmentCompleted` listener that called `$record->outcome()`. Every application with a default Decision wrote the same listener. The queued job now decides a Judgment that declares a default Decision, and the application performs its Action from `AssessmentDecided` (ADR-0004 keeps the Decision itself a pure, application-owned class).
+
+Sync `assess()` still decides nothing. Its caller holds the Assessment and decides it, perhaps with another Decision, perhaps not at all. A dispatched Judgment has no caller left holding anything, so deciding it with the Decision the Judgment itself declares is the only choice the application could have made. A Judgment with no default Decision is only assessed, and an Unassessed attempt is never decided (ADR-0014).
+
+Deciding is a separate `DecideAssessment` job, chained after the assessing job and working on the record, not a step at the end of it. A Decision is application code and can throw. Were it part of the assessing job, a retry would ask the Engine again: it would pay for another round and could get a different answer, deciding a Judgment on answers other than the ones first recorded (ADR-0006). The chained job rebuilds the Assessment from its record, so a retry decides the same answers and costs nothing. It runs on the assessing job's connection and queue, and is tried `judgment.queue.decide_tries` times, 3 by default, against the assessing job's single try.
+
+With persistence off, or when best-effort recording failed, there is no record to chain on, so the Decision runs inline at the end of the assessing job, and a throwing Decision fails that job. Applications that recorded the Outcome from an `AssessmentCompleted` listener must remove it, or each Judgment is decided twice.
