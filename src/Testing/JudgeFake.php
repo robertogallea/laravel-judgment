@@ -16,6 +16,8 @@ use RobertoGallea\Judgment\Exceptions\EngineFailed;
 use RobertoGallea\Judgment\Exceptions\UnscriptedJudgment;
 use RobertoGallea\Judgment\Jobs\AssessJudgment;
 use RobertoGallea\Judgment\Judgment;
+use RobertoGallea\Judgment\Questions\LikelihoodSet;
+use RobertoGallea\Judgment\Questions\Question;
 use RobertoGallea\Judgment\Support\AssessmentRecorder;
 use RobertoGallea\Judgment\Unassessed;
 
@@ -44,15 +46,20 @@ final class JudgeFake implements Judge
     {
         $this->assessed[] = $judgment;
 
+        $questions = $judgment->questions();
+        $evidence = $judgment->evidence();
+
         try {
-            $assessment = $this->script($judgment)->make();
+            $script = $this->script($judgment);
         } catch (EngineFailed $e) {
-            return $this->fail($judgment, $e);
+            return $this->fail($judgment, $e, $questions, $evidence);
         }
 
-        // Linked like the Judge's, unrecorded, so deciding it can start Review.
-        $this->assessments[] = $this->container->make(AssessmentRecorder::class)->link($assessment, null);
-        $this->container->make(Dispatcher::class)->dispatch(new AssessmentCompleted($judgment, $assessment));
+        // Recorded and linked like the Judge's, so deciding it writes the Outcome and can start Review.
+        $assessment = $script->make();
+        $record = $this->container->make(AssessmentRecorder::class)->record($assessment, $questions, $script->scriptedAnswers(), $evidence);
+        $this->assessments[] = $assessment;
+        $this->container->make(Dispatcher::class)->dispatch(new AssessmentCompleted($judgment, $assessment, $record));
 
         return $assessment;
     }
@@ -156,7 +163,7 @@ final class JudgeFake implements Judge
 
         $awaiting = [];
         foreach ($this->assessments as $assessment) {
-            $outcome = $recorder->awaitingReview($assessment);
+            $outcome = $this->awaitingReview($recorder, $assessment);
             if ($outcome !== null && $assessment->judgment instanceof $judgment) {
                 $awaiting[] = [$assessment->judgment, $outcome];
             }
@@ -169,6 +176,20 @@ final class JudgeFake implements Judge
                 sprintf('Expected %s to await Review matching the callback, but none of the %d awaiting Review matched.', $judgment, count($awaiting)),
             );
         }
+    }
+
+    /**
+     * The Outcome that put the Assessment in Review, deciding it or its record: a dispatched
+     * Judgment is decided in a chained job, on an Assessment rebuilt from the record.
+     */
+    private function awaitingReview(AssessmentRecorder $recorder, Assessment $assessment): ?Outcome
+    {
+        $record = $recorder->recordOf($assessment)?->fresh();
+        if ($record?->review_requested_at === null || $record->outcome_type === null) {
+            return $recorder->awaitingReview($assessment);
+        }
+
+        return ($record->outcome_type)::from((string) $record->outcome);
     }
 
     public function assertNothingAssessed(): void
@@ -202,15 +223,21 @@ final class JudgeFake implements Judge
         return $answers instanceof FakeAssessment ? $answers : Assessment::fake($judgment)->answers($answers);
     }
 
-    /** A scripted Engine failure ends as the Judge's would: thrown, or Unassessed as configured. */
-    private function fail(Judgment $judgment, EngineFailed $exception): Unassessed
+    /**
+     * A scripted Engine failure ends as the Judge's would: recorded as Unassessed, then thrown or returned as configured.
+     *
+     * @param  array<string, Question|LikelihoodSet>  $questions  as declared
+     * @param  array<string, mixed>  $evidence
+     */
+    private function fail(Judgment $judgment, EngineFailed $exception, array $questions, array $evidence): Unassessed
     {
-        $this->container->make(Dispatcher::class)->dispatch(new AssessmentFailed($judgment, $exception));
+        $record = $this->container->make(AssessmentRecorder::class)->recordFailure($judgment, $exception, null, $questions, $evidence);
+        $this->container->make(Dispatcher::class)->dispatch(new AssessmentFailed($judgment, $exception, $record));
 
         if ($this->container->make('config')->get('judgment.throw_on_failure')) {
             throw $exception;
         }
 
-        return new Unassessed($judgment, $exception);
+        return new Unassessed($judgment, $exception, $record);
     }
 }

@@ -4,9 +4,7 @@ use Illuminate\Support\Facades\Event;
 use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Events\AssessmentAwaitingReview;
 use RobertoGallea\Judgment\Events\AssessmentDecided;
-use RobertoGallea\Judgment\Facades\Judge;
 use RobertoGallea\Judgment\Models\AssessmentRecord;
-use RobertoGallea\Judgment\Tests\Fixtures\RefundAbuse;
 use RobertoGallea\Judgment\Tests\Fixtures\RefundOutcome;
 use RobertoGallea\Judgment\Tests\Fixtures\ReturnAbuse;
 use RobertoGallea\Judgment\Tests\Fixtures\ReturnDecision;
@@ -58,15 +56,6 @@ it('announces no decision for an Assessment::fake()', function () {
     Assessment::fake(refundAbuse())->likelihood('abusive', .80)->make()->outcome();
 
     Event::assertNotDispatched(AssessmentDecided::class);
-});
-
-it('announces a decision without a record under Judge::fake()', function () {
-    Judge::fake([RefundAbuse::class => ['abusive' => .80]]);
-
-    refundAbuse()->assess()->outcome();
-
-    Event::assertDispatched(AssessmentDecided::class, fn (AssessmentDecided $event) => $event->outcome === RefundOutcome::Reject
-        && $event->record === null);
 });
 
 it('announces a decision without a record when persistence is off', function () {

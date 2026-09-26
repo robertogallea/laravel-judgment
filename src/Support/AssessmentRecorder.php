@@ -312,7 +312,8 @@ final class AssessmentRecorder
         return new Assessment(
             $judgment,
             $questions,
-            $this->decode($questions, $answers),
+            // Only Judge::fake() records a Question unanswered: one its script left out stays unscripted.
+            $this->decode($questions, $answers, scripted: $engine === 'fake' && $model === 'fake'),
             new Provenance($engine, $model, $record->request_id, $record->provenance_details ?? []),
         );
     }
@@ -333,12 +334,16 @@ final class AssessmentRecorder
      *
      * @param  array<string, Question|LikelihoodSet>  $questions
      * @param  array<string, mixed>  $stored
+     * @param  bool  $scripted  whether a fake scripted the answers, so a Question it left out stays unanswered
      * @return array<string, Answer>
      */
-    public function decode(array $questions, array $stored): array
+    public function decode(array $questions, array $stored, bool $scripted = false): array
     {
         $answers = [];
         foreach ($questions as $key => $question) {
+            if ($scripted && ! array_key_exists($key, $stored)) {
+                continue;
+            }
             $answers[$key] = $this->deserialise($question, $stored[$key]);
         }
 

@@ -37,7 +37,7 @@ final class RefundDecision implements Decision
 - **[Review and Resolution](https://robertogallea.github.io/laravel-judgment/#review-and-resolution)**: uncertain Outcomes go to a person, whose Resolution is recorded next to the automatic one.
 - **[Queued assessment](https://robertogallea.github.io/laravel-judgment/#queued-assessment)**, [decided](https://robertogallea.github.io/laravel-judgment/#deciding-after-the-queue) with the default Decision, and opt-in **[caching](https://robertogallea.github.io/laravel-judgment/#caching)**.
 - **[Calibration](https://robertogallea.github.io/laravel-judgment/#calibration)** of thresholds against labelled cases, with `judgment:eval` (tables or [JSON](https://robertogallea.github.io/laravel-judgment/#calibration-json)) or [from code](https://robertogallea.github.io/laravel-judgment/#calibration-api), over Resolutions, a dataset or cases in memory.
-- **[Strict test fakes](https://robertogallea.github.io/laravel-judgment/#testing)**: `Assessment::fake()` and `Judge::fake()`, no Engine needed.
+- **[Strict test fakes](https://robertogallea.github.io/laravel-judgment/#testing)**: `Assessment::fake()` and `Judge::fake()`, no Engine needed; `Judge::fake()` records like the Judge.
 - **[Coding-agent skills](https://robertogallea.github.io/laravel-judgment/#coding-agents-laravel-boost)** for Laravel Boost, plus [events and logging](https://robertogallea.github.io/laravel-judgment/#events-and-logging) for every assessment and [every decision](https://robertogallea.github.io/laravel-judgment/#acting-on-the-outcome).
 
 ## Use cases

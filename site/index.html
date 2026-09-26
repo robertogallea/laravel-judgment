@@ -742,12 +742,12 @@ final class RefundOnApproval implements ShouldQueue
     }
 }
 </code></pre>
-<p>The event carries <code>$judgment</code>, <code>$assessment</code>, <code>$decision</code>, <code>$outcome</code> and <code>$record</code>. <code>$record</code> is null when persistence is off, best-effort recording failed, or under <code>Judge::fake()</code>. It serialises like <code>AssessmentCompleted</code>, so the listener can be queued; the record comes back fresh from the database. An Outcome that requires Review fires <code>AssessmentAwaitingReview</code> as well, not instead. The event fires once per decision, so deciding the same Assessment twice fires it twice: keep the Action idempotent. A record already in Review keeps the Outcome that sent it there whatever a later Decision yields, which is why the listener above also checks <code>isAwaitingReview()</code>. That check needs a record: with a null <code>$record</code>, an Assessment decided again after its Outcome required Review announces the new Outcome with nothing to show the earlier one, so decide it once.</p>
+<p>The event carries <code>$judgment</code>, <code>$assessment</code>, <code>$decision</code>, <code>$outcome</code> and <code>$record</code>. <code>$record</code> is null when persistence is off or best-effort recording failed. It serialises like <code>AssessmentCompleted</code>, so the listener can be queued; the record comes back fresh from the database. An Outcome that requires Review fires <code>AssessmentAwaitingReview</code> as well, not instead. The event fires once per decision, so deciding the same Assessment twice fires it twice: keep the Action idempotent. A record already in Review keeps the Outcome that sent it there whatever a later Decision yields, which is why the listener above also checks <code>isAwaitingReview()</code>. That check needs a record: with a null <code>$record</code>, an Assessment decided again after its Outcome required Review announces the new Outcome with nothing to show the earlier one, so decide it once.</p>
 
 <h2 id="review-and-resolution">Review and Resolution</h2>
 <p>An Outcome whose <code>requiresReview()</code> returns true, like <code>RefundOutcome::Escalate</code> in <a href="#deciding">Deciding</a>, needs a person to decide before its Action is taken.</p>
 <p>When a recorded Decision yields such an Outcome (through <code>outcome()</code> or <code>decide()</code>, as in the <a href="#deciding-after-the-queue">table above</a>), the record enters Review and <code>AssessmentAwaitingReview</code> fires. A record enters Review once, even when two copies of it are decided at the same moment. From then on it keeps the Outcome and Decision that sent it to Review: deciding it again records nothing and fires no further <code>AssessmentAwaitingReview</code>, only the <a href="#acting-on-the-outcome"><code>AssessmentDecided</code></a> every decision fires. A <a href="#replaying-an-assessment">Replay</a> never starts Review. The package ships no review UI.</p>
-<p>The event carries <code>$judgment</code>, <code>$assessment</code>, <code>$outcome</code>, <code>$record</code> and <code>$requestedAt</code>. <code>$record</code> is null when persistence is off or under <code>Judge::fake()</code>, and a record is needed to resolve.</p>
+<p>The event carries <code>$judgment</code>, <code>$assessment</code>, <code>$outcome</code>, <code>$record</code> and <code>$requestedAt</code>. <code>$record</code> is null when persistence is off, and a record is needed to resolve.</p>
 
 <h3 id="notifying-reviewers">Recipe: notifying reviewers</h3>
 <p>Listen for <code>AssessmentAwaitingReview</code> and send an ordinary Laravel notification. Queue the listener, so a slow mail server never holds up the request that decided the Outcome:</p>
@@ -964,8 +964,8 @@ $report = Calibration::for(RefundAbuse::class)
 <h2 id="events-and-logging">Events and logging</h2>
 <p>Every assessment fires an event:</p>
 <ul>
-  <li><code>RobertoGallea\Judgment\Events\AssessmentCompleted</code>, with <code>$judgment</code>, <code>$assessment</code> and <code>$record</code> (the <code>AssessmentRecord</code>, or null when persistence is off, best-effort recording failed, or under <code>Judge::fake()</code>)</li>
-  <li><code>RobertoGallea\Judgment\Events\AssessmentFailed</code>, with <code>$judgment</code>, <code>$exception</code> and <code>$record</code> (the <a href="#recorded-failures">recorded failed attempt</a>, or null when persistence is off, the write failed, or under <code>Judge::fake()</code>), whether or not the failure is thrown</li>
+  <li><code>RobertoGallea\Judgment\Events\AssessmentCompleted</code>, with <code>$judgment</code>, <code>$assessment</code> and <code>$record</code> (the <code>AssessmentRecord</code>, or null when persistence is off or best-effort recording failed)</li>
+  <li><code>RobertoGallea\Judgment\Events\AssessmentFailed</code>, with <code>$judgment</code>, <code>$exception</code> and <code>$record</code> (the <a href="#recorded-failures">recorded failed attempt</a>, or null when persistence is off or the write failed), whether or not the failure is thrown</li>
 </ul>
 <p>Every decision that counts fires <code>RobertoGallea\Judgment\Events\AssessmentDecided</code>, with <code>$judgment</code>, <code>$assessment</code>, <code>$decision</code>, <code>$outcome</code> and <code>$record</code>, never for a Replay (see <a href="#acting-on-the-outcome">Acting on the Outcome</a>).</p>
 <p>The Review lifecycle fires two more: <code>AssessmentAwaitingReview</code> and <code>AssessmentResolved</code> (see <a href="#review-and-resolution">Review and Resolution</a>).</p>
@@ -988,7 +988,7 @@ $report = Calibration::for(RefundAbuse::class)
   <thead><tr><th>You are testing</th><th>Use</th><th>Engine</th><th>Database</th></tr></thead>
   <tbody>
     <tr><td>A Decision: its thresholds and the order of its arms</td><td><code>Assessment::fake()</code></td><td>none</td><td>none</td></tr>
-    <tr><td>Code that assesses or dispatches a Judgment and acts on the Outcome</td><td><code>Judge::fake()</code></td><td>blocked</td><td>not needed for the Assessments</td></tr>
+    <tr><td>Code that assesses or dispatches a Judgment and acts on the Outcome</td><td><code>Judge::fake()</code></td><td>blocked</td><td>the package’s migration, unless persistence is off</td></tr>
   </tbody>
 </table></div>
 
@@ -1056,8 +1056,8 @@ Judge::fake([
     Judge::assertAssessed(RefundAbuse::class, fn (RefundAbuse $judgment) =&gt; $judgment-&gt;refund-&gt;is($refund));
 });
 </code></pre>
-<p>A closure can also return an <code>Assessment::fake($judgment)</code> builder, or throw an <code>EngineFailed</code> to test failure handling: the fake then fires <code>AssessmentFailed</code> and throws or returns <code>Unassessed</code> as <code>judgment.throw_on_failure</code> says.</p>
-<p>Assessing a Judgment with no script throws <code>UnscriptedJudgment</code>, and a sequence that runs out throws <code>ExhaustedSequence</code>. While the fake is active every Engine connection throws <code>RealEngineCallPrevented</code>, so no test reaches a real Engine. Assessments from the fake fire <code>AssessmentCompleted</code> and check every Decision for purity, like <code>Assessment::fake()</code>. They are not recorded, so a feature test needs no migration for them.</p>
+<p>A closure can also return an <code>Assessment::fake($judgment)</code> builder, or throw an <code>EngineFailed</code> to test failure handling: the fake then records an <a href="#recorded-failures">Unassessed attempt</a>, fires <code>AssessmentFailed</code> with it, and throws or returns <code>Unassessed</code> as <code>judgment.throw_on_failure</code> says.</p>
+<p>Assessing a Judgment with no script throws <code>UnscriptedJudgment</code>, and a sequence that runs out throws <code>ExhaustedSequence</code>. While the fake is active every Engine connection throws <code>RealEngineCallPrevented</code>, so no test reaches a real Engine. Assessments from the fake check every Decision applied to them for purity, like <code>Assessment::fake()</code>, and are never cached.</p>
 <p>Assert what was assessed:</p>
 <pre><code class="language-php">Judge::assertAssessed(RefundAbuse::class);
 Judge::assertAssessed(RefundAbuse::class, fn (RefundAbuse $judgment) =&gt; $judgment-&gt;refund-&gt;is($refund));
@@ -1068,12 +1068,25 @@ Judge::assertNothingAssessed();
 <pre><code class="language-php">Judge::assertAwaitingReview(RefundAbuse::class);
 Judge::assertAwaitingReview(RefundAbuse::class, fn (RefundAbuse $judgment, RefundOutcome $outcome) =&gt; $outcome === RefundOutcome::Escalate);
 </code></pre>
-<p>A faked Assessment is not recorded, so it cannot be resolved. <code>AssessmentDecided</code> and <code>AssessmentAwaitingReview</code> still fire, with a null <code>$record</code>. A Decision unit test on <code>Assessment::fake()</code> never enters Review.</p>
-<p>The fake dispatches Judgments through the queue like the Judge. On the sync queue the job runs, the fake answers from its script, and a Judgment with a default Decision is decided in the same job, since nothing is recorded to chain on. Under <code>Queue::fake()</code> nothing runs. Either way you can assert what was dispatched:</p>
+<p>The record of an Assessment from the fake enters Review like any other, so a test can <a href="#resolving">resolve</a> it. A Decision unit test on <code>Assessment::fake()</code> never enters Review.</p>
+<p>The fake dispatches Judgments through the queue like the Judge. On the sync queue the job runs, the fake answers from its script and records the Assessment, and a Judgment with a default Decision is decided from that record in the <a href="#deciding-after-the-queue">chained job</a>, as the Judge’s is; with persistence off, nothing is recorded to chain on, so it is decided in the same job. The chained job decides an Assessment rebuilt from the record, so it does not run the Decision twice for purity. <code>assertAwaitingReview</code> sees a Judgment sent to Review there too. Under <code>Queue::fake()</code> nothing runs. Either way you can assert what was dispatched:</p>
 <pre><code class="language-php">Judge::assertDispatched(RefundAbuse::class);
 Judge::assertDispatched(RefundAbuse::class, fn (RefundAbuse $judgment) =&gt; $judgment-&gt;refund-&gt;is($refund));
 Judge::assertNotDispatched(ProductReview::class);
 </code></pre>
+
+<h3 id="judge-fake-records" data-nav="What the fake records">What <code>Judge::fake()</code> records</h3>
+<p>The fake records like the Judge and follows <a href="#persistence-configuration"><code>judgment.persistence.*</code></a> the same way, so a test can read, decide or resolve the <code>AssessmentRecord</code> without a real Engine:</p>
+<ul>
+  <li>A scripted Assessment is recorded as the Judge would record the same answers, with the Provenance of <code>Assessment::fake()</code>: engine and model <code>fake</code>, no request id. <code>AssessmentCompleted</code> carries the record.</li>
+  <li>A scripted failure is recorded as an Unassessed attempt, with why it failed and no answers.</li>
+  <li>Deciding an Assessment from the fake writes the Decision and Outcome to its record and fires <code>AssessmentDecided</code>; an Outcome requiring Review puts the record in Review and fires <code>AssessmentAwaitingReview</code>, both with the record.</li>
+  <li>A Question the script left out is recorded without an answer. Rebuilding the record leaves it unscripted, so a Decision that reads it throws <code>UnscriptedQuestion</code>.</li>
+</ul>
+<p>So a feature test that assesses through the fake needs the package’s migration, as the application does. Without it, and with <code>judgment.persistence.required</code> on (the default), assessing throws <a href="#when-recording-fails"><code>AssessmentNotRecorded</code></a>. A test that needs no record can turn persistence off instead; the fake then records nothing, and events carry a null <code>$record</code>:</p>
+<pre><code class="language-php">config(['judgment.persistence.enabled' =&gt; false]);   // in the test, or JUDGMENT_PERSIST=false in phpunit.xml
+</code></pre>
+<p><strong>Upgrading from v0.1.0.</strong> The fake recorded nothing before, so test suites that assessed through it without the migration, or without <code>RefreshDatabase</code>, now get <code>AssessmentNotRecorded</code>. Add the migration and <code>RefreshDatabase</code> to the tests that need records, and turn persistence off for the rest.</p>
 
 <h2 id="package-development">Package development</h2>
 <pre><code class="language-bash">composer test      # Pest

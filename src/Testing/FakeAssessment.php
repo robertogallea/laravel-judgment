@@ -152,6 +152,18 @@ final class FakeAssessment
     }
 
     /**
+     * The answers scripted so far, for recording the Assessment as the Judge would.
+     *
+     * @internal
+     *
+     * @return array<string, Answer>
+     */
+    public function scriptedAnswers(): array
+    {
+        return $this->answers;
+    }
+
+    /**
      * Whether a fake made the Assessment, rather than an Engine.
      *
      * @internal
