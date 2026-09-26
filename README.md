@@ -164,7 +164,7 @@ $outcome = $assessment->outcome();                    // RefundOutcome::Escalate
 
 ## Documentation
 
-The full reference covers every Question kind, Engine options, caching, persistence and replay, queues, Review, Calibration reports, events, logging and the test fakes: **[robertogallea.github.io/laravel-judgment](https://robertogallea.github.io/laravel-judgment/)**. Design decisions are recorded in [`docs/adr`](docs/adr).
+The full reference covers every Question kind, Engine options, caching, persistence and replay, queues, Review, Calibration reports, events, logging and the test fakes: **[robertogallea.github.io/laravel-judgment](https://robertogallea.github.io/laravel-judgment/)**. Design decisions are recorded in [`docs/adr`](docs/adr), and changes between releases in the [changelog](CHANGELOG.md).
 
 ## Package development
 
