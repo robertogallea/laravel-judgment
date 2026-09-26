@@ -8,13 +8,17 @@ use RobertoGallea\Judgment\Exceptions\InvalidCalibration;
 use RobertoGallea\Judgment\Judgment;
 
 /**
- * Calibration of a Judgment's Decisions against labelled cases: past Resolutions by default, or a
- * dataset. Every case is asked of each Engine connection chosen, and each Decision chosen is applied
- * to its answers. Nothing is cached, recorded, logged or announced. Each call returns a new builder.
+ * Calibration of a Judgment's Decisions against labelled cases: past Resolutions by default, a
+ * dataset, or cases in memory. Every case is asked of each Engine connection chosen, and each
+ * Decision chosen is applied to its answers. Nothing is cached, recorded, logged or announced.
+ * Each call returns a new builder.
  */
 final class Calibration
 {
     private ?string $dataset = null;
+
+    /** @var list<LabelledCase>|null */
+    private ?array $cases = null;
 
     /** @var list<string> */
     private array $engines = [];
@@ -47,6 +51,7 @@ final class Calibration
     {
         $calibration = clone $this;
         $calibration->dataset = null;
+        $calibration->cases = null;
 
         return $calibration;
     }
@@ -56,6 +61,28 @@ final class Calibration
     {
         $calibration = clone $this;
         $calibration->dataset = $path;
+        $calibration->cases = null;
+
+        return $calibration;
+    }
+
+    /**
+     * Calibrate against these cases, for example Resolutions the application selected itself.
+     *
+     * @param  iterable<LabelledCase>  $cases
+     *
+     * @throws InvalidCalibration when one is not a labelled case of the Judgment
+     */
+    public function cases(iterable $cases): self
+    {
+        $calibration = clone $this;
+        $calibration->dataset = null;
+        $calibration->cases = [];
+        foreach (array_values([...$cases]) as $index => $case) {
+            $calibration->cases[] = $case->judgment instanceof $this->judgment
+                ? $case
+                : throw InvalidCalibration::notALabelledCase($index, $this->judgment);
+        }
 
         return $calibration;
     }
@@ -91,9 +118,11 @@ final class Calibration
     public function run(): CalibrationReport
     {
         $skipped = 0;
-        $cases = $this->dataset === null
-            ? Cases::fromResolutions($this->judgment, $skipped)
-            : Cases::fromDataset($this->judgment, $this->dataset);
+        $cases = match (true) {
+            $this->cases !== null => $this->cases,
+            $this->dataset !== null => Cases::fromDataset($this->judgment, $this->dataset),
+            default => Cases::fromResolutions($this->judgment, $skipped),
+        };
         if ($cases === []) {
             throw InvalidCalibration::noCases($this->judgment);
         }

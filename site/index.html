@@ -865,7 +865,7 @@ php artisan judgment:eval RefundAbuse --engine=jev --engine=jev-next    # compar
 <pre><code class="language-php">use RobertoGallea\Judgment\Calibration\Calibration;
 
 $report = Calibration::for(RefundAbuse::class)
-    -&gt;fromDataset(storage_path('refunds.json'))          // or fromResolutions(), the default
+    -&gt;fromDataset(storage_path('refunds.json'))          // or fromResolutions(), the default, or cases()
     -&gt;engines('jev', 'jev-next')                         // like --engine; the Judgment’s own when omitted
     -&gt;decisions(RefundDecision::class, StrictRefundDecision::class) // like --decision; the default when omitted
     -&gt;run();
@@ -876,6 +876,14 @@ foreach ($report-&gt;results as $result) {
     $result-&gt;accuracy();           // 0.94, or null when nothing was decided automatically
 }
 </code></pre>
+<p>An application can also select the cases itself, for example last month’s Resolutions, without writing a dataset file. <code>cases()</code> takes a list of <code>LabelledCase</code>s, each a Judgment and the Outcome a person says is right, as an Outcome enum case rather than a string. Each case is asked over the Judgment’s current Evidence:</p>
+<pre><code class="language-php">use RobertoGallea\Judgment\Calibration\LabelledCase;
+
+$report = Calibration::for(RefundAbuse::class)
+    -&gt;cases($refunds-&gt;map(fn (Refund $refund) =&gt; LabelledCase::of(new RefundAbuse($refund), $refund-&gt;agreed_outcome)))
+    -&gt;run();
+</code></pre>
+<p>Every case must be of the Judgment passed to <code>for()</code>, and its expected Outcomes follow the dataset’s rules: a case of another Judgment, an Outcome of another enum (even with the same value), or one that requires Review throws <code>InvalidCalibration</code>.</p>
 <p>The cases, the labels and the rules are those of <a href="#calibration-labels">the command</a>, and it throws <code>InvalidCalibration</code> where the command stops with an error. Every class of the report is read-only:</p>
 <div class="table-wrap"><table>
   <thead><tr><th>Class</th><th>Exposes</th></tr></thead>

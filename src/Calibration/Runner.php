@@ -6,6 +6,7 @@ use Illuminate\Contracts\Container\Container;
 use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Contracts\Decision;
 use RobertoGallea\Judgment\Contracts\Engine;
+use RobertoGallea\Judgment\Contracts\Outcome;
 use RobertoGallea\Judgment\EngineManager;
 use RobertoGallea\Judgment\Exceptions\EngineFailed;
 use RobertoGallea\Judgment\Exceptions\InvalidCalibration;
@@ -81,12 +82,23 @@ final class Runner
             }
 
             $outcome = $decision($assessment, $judgment);
-            $expected = $outcome::tryFrom($case->expected) ?? throw InvalidCalibration::notAnOutcome($case->expected, $decision, $outcome::class);
+            $expected = $this->expected($case, $decision, $outcome);
+            $label = (string) $expected->value;
             if ($expected->requiresReview()) {
-                throw InvalidCalibration::requiresReview($case->expected);
+                throw InvalidCalibration::requiresReview($label);
             }
-            $result->decided($assessment, $case->expected, $outcome);
+            $result->decided($assessment, $label, $outcome);
         }
+    }
+
+    /** The case's expected Outcome, which must be one of the Decision's Outcome enum. */
+    private function expected(LabelledCase $case, Decision $decision, Outcome $outcome): Outcome
+    {
+        $expected = $case->expected instanceof Outcome
+            ? ($case->expected instanceof $outcome ? $case->expected : null)
+            : $outcome::tryFrom($case->expected);
+
+        return $expected ?? throw InvalidCalibration::notAnOutcome($case->expected, $decision, $outcome::class);
     }
 
     private function engine(Judgment $judgment, ?string $connection): Engine

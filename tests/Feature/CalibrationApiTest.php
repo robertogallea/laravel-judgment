@@ -5,10 +5,14 @@ use RobertoGallea\Judgment\Calibration\Calibration;
 use RobertoGallea\Judgment\Calibration\CalibrationBand;
 use RobertoGallea\Judgment\Calibration\CalibrationIdentity;
 use RobertoGallea\Judgment\Calibration\CalibrationResult;
+use RobertoGallea\Judgment\Calibration\LabelledCase;
 use RobertoGallea\Judgment\Contracts\Engine;
 use RobertoGallea\Judgment\EngineManager;
 use RobertoGallea\Judgment\Exceptions\InvalidCalibration;
 use RobertoGallea\Judgment\Support\AssessmentRecorder;
+use RobertoGallea\Judgment\Tests\Fixtures\ForeignOutcome;
+use RobertoGallea\Judgment\Tests\Fixtures\Refund;
+use RobertoGallea\Judgment\Tests\Fixtures\RefundAbuse;
 use RobertoGallea\Judgment\Tests\Fixtures\RefundOutcome;
 use RobertoGallea\Judgment\Tests\Fixtures\ReturnAbuse;
 use RobertoGallea\Judgment\Tests\Fixtures\ReturnDecision;
@@ -89,6 +93,43 @@ it('labels the cases with past Resolutions, counting those whose Subject no long
     expect($report->skipped)->toBe(1)
         ->and($report->results)->toHaveCount(1)
         ->and([$report->results[0]->cases, $report->results[0]->correct])->toBe([1, 1]);
+});
+
+it('calibrates against in-memory cases labelled with Outcomes, like a dataset', function () {
+    app()->instance(Engine::class, abuseEngine(['Zip broke' => .10, 'Wore it to a wedding' => .90, 'Changed my mind' => .70]));
+    $return = fn (string $item, string $reason) => new ReturnAbuse(new ReturnRequest(['item' => $item, 'reason' => $reason]));
+
+    $report = Calibration::for(ReturnAbuse::class)->cases([
+        LabelledCase::of($return('Jacket', 'Zip broke'), RefundOutcome::Approve),
+        LabelledCase::of($return('Dress', 'Wore it to a wedding'), RefundOutcome::Reject),
+        LabelledCase::of($return('Shoes', 'Changed my mind'), RefundOutcome::Approve),
+    ])->run();
+
+    expect($report->skipped)->toBe(0)
+        ->and($report->results)->toHaveCount(1)
+        ->and($report->results[0]->identity->decision)->toBe(ReturnDecision::class)
+        ->and([$report->results[0]->cases, $report->results[0]->automatic, $report->results[0]->correct])->toBe([3, 3, 2])
+        ->and($report->results[0]->bands[0]->expected)->toBe(['approve' => 1]);
+});
+
+it('refuses an in-memory case expecting an Outcome of another enum, or one that requires Review', function () {
+    app()->instance(Engine::class, abuseEngine(['Zip broke' => .10]));
+    $calibration = Calibration::for(ReturnAbuse::class);
+    $return = new ReturnAbuse(new ReturnRequest(['item' => 'Jacket', 'reason' => 'Zip broke']));
+
+    expect(fn () => $calibration->cases([LabelledCase::of($return, ForeignOutcome::Approve)])->run())
+        ->toThrow(InvalidCalibration::class, 'ForeignOutcome::Approve is not an Outcome of ReturnDecision: expected approve, escalate or reject.')
+        ->and(fn () => $calibration->cases([LabelledCase::of($return, RefundOutcome::Escalate)])->run())
+        ->toThrow(InvalidCalibration::class, '"escalate" requires Review, so it cannot be the right Outcome of a case.');
+});
+
+it('refuses an in-memory case of another Judgment', function () {
+    $calibration = Calibration::for(ReturnAbuse::class);
+    $return = LabelledCase::of(new ReturnAbuse(new ReturnRequest(['item' => 'Jacket', 'reason' => 'Zip broke'])), RefundOutcome::Approve);
+    $refund = LabelledCase::of(new RefundAbuse(new Refund('Headphones', 120, 'Arrived damaged.')), RefundOutcome::Approve);
+
+    expect(fn () => $calibration->cases([$return, $refund]))
+        ->toThrow(InvalidCalibration::class, 'Case 1 is not a labelled case of '.ReturnAbuse::class.'.');
 });
 
 it('leaves a builder and its earlier reports unchanged', function () {
