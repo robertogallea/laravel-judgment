@@ -6,11 +6,14 @@ use Illuminate\Console\Command;
 use RobertoGallea\Judgment\Calibration\Calibration;
 use RobertoGallea\Judgment\Calibration\CalibrationBand;
 use RobertoGallea\Judgment\Calibration\CalibrationIdentity;
+use RobertoGallea\Judgment\Calibration\CalibrationReport;
 use RobertoGallea\Judgment\Calibration\CalibrationResult;
 use RobertoGallea\Judgment\Contracts\Decision;
 use RobertoGallea\Judgment\Exceptions\InvalidCalibration;
 use RobertoGallea\Judgment\Judgment;
 use Symfony\Component\Console\Attribute\AsCommand;
+use Symfony\Component\Console\Output\OutputInterface;
+use Throwable;
 
 /**
  * Calibration: runs a Judgment and its Decisions against labelled cases with the configured
@@ -23,7 +26,8 @@ class CalibrateCommand extends Command
         {judgment : The Judgment to calibrate}
         {--dataset= : A JSON file of labelled cases; past Resolutions are the labels when omitted}
         {--decision=* : A Decision to calibrate instead of the Judgment\'s default; repeat to compare}
-        {--engine=* : An Engine connection to ask instead of the Judgment\'s own; repeat to compare models}';
+        {--engine=* : An Engine connection to ask instead of the Judgment\'s own; repeat to compare models}
+        {--json : Print the report as JSON}';
 
     protected $description = 'Calibrate a Judgment\'s Decisions against labelled cases';
 
@@ -36,10 +40,27 @@ class CalibrateCommand extends Command
             $dataset = $this->strings('dataset')[0] ?? null;
 
             $report = ($dataset === null ? $calibration->fromResolutions() : $calibration->fromDataset($dataset))->run();
-        } catch (InvalidCalibration $e) {
+        } catch (Throwable $e) {
+            // With --json, every error is JSON too, so standard output always parses.
+            if ($this->option('json')) {
+                $this->json(['error' => $e->getMessage()]);
+
+                return self::FAILURE;
+            }
+
+            if (! $e instanceof InvalidCalibration) {
+                throw $e;
+            }
+
             $this->components->error($e->getMessage());
 
             return self::FAILURE;
+        }
+
+        if ($this->option('json')) {
+            $this->json($this->report($report));
+
+            return self::SUCCESS;
         }
 
         if ($report->skipped > 0) {
@@ -52,6 +73,56 @@ class CalibrateCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Print data as JSON, raw so that console tags in it are never styled.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function json(array $data): void
+    {
+        $this->output->writeln(json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR), OutputInterface::OUTPUT_RAW);
+    }
+
+    /**
+     * The report as plain data, with every field and measure of its results and bands.
+     *
+     * @return array<string, mixed>
+     */
+    private function report(CalibrationReport $report): array
+    {
+        return [
+            'results' => array_map(fn (CalibrationResult $result) => [
+                'identity' => [
+                    'questions' => $result->identity->questions,
+                    'model' => $result->identity->model,
+                    'decision' => $result->identity->decision,
+                    'decisionVersion' => $result->identity->decisionVersion,
+                    'language' => $result->identity->language,
+                ],
+                'cases' => $result->cases,
+                'unassessed' => $result->unassessed,
+                'sentToReview' => $result->sentToReview,
+                'automatic' => $result->automatic,
+                'correct' => $result->correct,
+                'reviewRate' => $result->reviewRate(),
+                'accuracy' => $result->accuracy(),
+                'bands' => array_map(fn (CalibrationBand $band) => [
+                    'question' => $band->question,
+                    'from' => $band->from,
+                    'to' => $band->to,
+                    'cases' => $band->cases,
+                    'expected' => (object) $band->expected,
+                    'sentToReview' => $band->sentToReview,
+                    'automatic' => $band->automatic,
+                    'correct' => $band->correct,
+                    'reviewRate' => $band->reviewRate(),
+                    'accuracy' => $band->accuracy(),
+                ], $result->bands),
+            ], $report->results),
+            'skipped' => $report->skipped,
+        ];
     }
 
     /** @param  list<CalibrationResult>  $results */

@@ -196,3 +196,72 @@ it('counts a failed case under the model version its Engine reports', function (
     expect($report)->toMatch(row('fake-1.2.0', 'ReturnDecision v2', 'en', '2', '1', '0.0%', '100.0% (1/1)'))
         ->not->toContain('fake-latest');
 });
+
+it('prints the whole report as JSON for tools and CI', function () {
+    $status = Artisan::call('judgment:eval', [
+        'judgment' => ReturnAbuse::class,
+        '--dataset' => fourReturns(),
+        '--decision' => [ReviewedReturnDecision::class],
+        '--json' => true,
+    ]);
+    $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($status)->toBe(0)
+        ->and($report['skipped'])->toBe(0)
+        ->and($report['results'])->toHaveCount(1)
+        ->and($report['results'][0]['identity'])->toMatchArray([
+            'model' => 'fake-1.0.0',
+            'decision' => ReviewedReturnDecision::class,
+            'decisionVersion' => null,
+            'language' => 'en',
+        ])
+        ->and($report['results'][0]['identity']['questions'])->toMatch('/^[0-9a-f]{16,}$/')
+        ->and($report['results'][0])->toMatchArray([
+            'cases' => 4,
+            'unassessed' => 0,
+            'sentToReview' => 2,
+            'automatic' => 2,
+            'correct' => 2,
+            'reviewRate' => 0.5,
+            'accuracy' => 1.0,
+        ])
+        ->and($report['results'][0]['bands'])->toBe([
+            ['question' => 'abusive', 'from' => 0.1, 'to' => 0.2, 'cases' => 1, 'expected' => ['approve' => 1], 'sentToReview' => 0, 'automatic' => 1, 'correct' => 1, 'reviewRate' => 0.0, 'accuracy' => 1.0],
+            ['question' => 'abusive', 'from' => 0.4, 'to' => 0.5, 'cases' => 2, 'expected' => ['approve' => 1, 'reject' => 1], 'sentToReview' => 2, 'automatic' => 0, 'correct' => 0, 'reviewRate' => 1.0, 'accuracy' => null],
+            ['question' => 'abusive', 'from' => 0.9, 'to' => 1.0, 'cases' => 1, 'expected' => ['reject' => 1], 'sentToReview' => 0, 'automatic' => 1, 'correct' => 1, 'reviewRate' => 0.0, 'accuracy' => 1.0],
+            ['question' => 'department', 'from' => 0.5, 'to' => 0.6, 'cases' => 4, 'expected' => ['approve' => 2, 'reject' => 2], 'sentToReview' => 2, 'automatic' => 2, 'correct' => 2, 'reviewRate' => 0.5, 'accuracy' => 1.0],
+        ]);
+});
+
+it('counts skipped Resolutions in the JSON report, printing nothing else', function () {
+    reviewedReturn('Wore it to a wedding', RefundOutcome::Reject);
+    reviewedReturn('Zip broke', RefundOutcome::Approve)->delete();
+    app()->instance(Engine::class, abuseEngine(['Wore it to a wedding' => .90]));
+
+    Artisan::call('judgment:eval', ['judgment' => ReturnAbuse::class, '--json' => true]);
+
+    $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($report['skipped'])->toBe(1)
+        ->and($report['results'])->toHaveCount(1)
+        ->and($report['results'][0]['cases'])->toBe(1);
+});
+
+it('prints an error as JSON and fails', function () {
+    app()->instance(Engine::class, abuseEngine(['Zip broke' => .10]));
+
+    $status = Artisan::call('judgment:eval', ['judgment' => ReturnAbuse::class, '--json' => true, '--dataset' => labelledCases([
+        ['subject' => ['item' => 'Jacket', 'reason' => 'Zip broke'], 'expected' => 'aprove'],
+    ])]);
+
+    expect($status)->toBe(1)
+        ->and(json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR))
+        ->toBe(['error' => '"aprove" is not an Outcome of ReturnDecision: expected approve, escalate or reject.']);
+});
+
+it('prints any error as JSON, such as an Engine connection that is not configured', function () {
+    $status = Artisan::call('judgment:eval', ['judgment' => ReturnAbuse::class, '--dataset' => fourReturns(), '--engine' => ['nope'], '--json' => true]);
+
+    expect($status)->toBe(1)
+        ->and(json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR)['error'])->toContain('"nope" is not configured');
+});

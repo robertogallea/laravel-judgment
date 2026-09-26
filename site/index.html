@@ -860,6 +860,49 @@ php artisan judgment:eval RefundAbuse --engine=jev --engine=jev-next    # compar
 | abusive    | 0.9–1.0 | 9     | reject 9             | 100.0%   | 0.0%        |
 </code></pre>
 
+<h3 id="calibration-json" data-nav="JSON output">JSON output</h3>
+<p>With <code>--json</code>, <code>judgment:eval</code> prints the report as JSON and nothing else, so a tool or a CI job can read it without scraping the tables. The skipped Resolutions are the <code>skipped</code> field instead of a warning:</p>
+<pre><code class="language-bash">php artisan judgment:eval RefundAbuse --dataset=storage/refunds.json --json > calibration.json
+</code></pre>
+<p>Every field of the <a href="#calibration-api">report</a> is there, named as in the API, and each <code>reviewRate</code> and <code>accuracy</code> is a share between 0 and 1, or <code>null</code> when there is nothing to measure. <code>questions</code> is the full fingerprint, <code>decision</code> the full class name, and <code>decisionVersion</code> and <code>language</code> are <code>null</code> when unknown:</p>
+<pre><code class="language-json">{
+    "results": [
+        {
+            "identity": {
+                "questions": "3f2a9c1b…",
+                "model": "jev-1.13.0",
+                "decision": "App\\Decisions\\RefundDecision",
+                "decisionVersion": "2",
+                "language": "en"
+            },
+            "cases": 29,
+            "unassessed": 0,
+            "sentToReview": 6,
+            "automatic": 23,
+            "correct": 23,
+            "reviewRate": 0.20689655172413793,
+            "accuracy": 1.0,
+            "bands": [
+                {
+                    "question": "abusive",
+                    "from": 0.4,
+                    "to": 0.5,
+                    "cases": 6,
+                    "expected": {"approve": 2, "reject": 4},
+                    "sentToReview": 6,
+                    "automatic": 0,
+                    "correct": 0,
+                    "reviewRate": 1.0,
+                    "accuracy": null
+                }
+            ]
+        }
+    ],
+    "skipped": 0
+}
+</code></pre>
+<p>Any error, such as an invalid label or an Engine connection that is not configured, still exits with status 1 and prints <code>{"error": "…"}</code>, so standard output stays valid JSON. Without <code>--json</code> the output is unchanged.</p>
+
 <h3 id="calibration-api" data-nav="From code">Calibrating from code</h3>
 <p><code>judgment:eval</code> is built on a public API, so an application can calibrate without parsing the command’s output, for example to chart a Decision’s accuracy on an admin page. <code>Calibration::for()</code> takes a Judgment class and returns a builder. Each method returns a new builder, and <code>run()</code> returns a <code>CalibrationReport</code>:</p>
 <pre><code class="language-php">use RobertoGallea\Judgment\Calibration\Calibration;
