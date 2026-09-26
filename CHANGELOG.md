@@ -2,6 +2,8 @@
 
 All notable changes to this package are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the package uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
 ## [0.2.0] - 2026-09-26
 
 Upgrading from 0.1.0 breaks five things, marked **Breaking** below. Follow the [Upgrade guide](https://robertogallea.github.io/laravel-judgment/#upgrading).
@@ -33,5 +35,6 @@ Upgrading from 0.1.0 breaks five things, marked **Breaking** below. Follow the [
 
 First release.
 
+[Unreleased]: https://github.com/robertogallea/laravel-judgment/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/robertogallea/laravel-judgment/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/robertogallea/laravel-judgment/releases/tag/v0.1.0
