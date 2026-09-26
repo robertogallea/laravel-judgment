@@ -78,6 +78,8 @@ TYPESAFE_API_KEY=your-key
 
 Publish the config with `php artisan vendor:publish --tag=judgment-config`. To run your own Engine instead, see [Laya](https://robertogallea.github.io/laravel-judgment/#laya).
 
+Upgrading from v0.1.0? Follow [Upgrading](https://robertogallea.github.io/laravel-judgment/#upgrading).
+
 ## Quick start
 
 Generate the classes:

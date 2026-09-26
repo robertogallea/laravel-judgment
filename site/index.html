@@ -254,7 +254,7 @@ $assessment-&gt;outcome();                             // your Decision: Escalat
 php artisan migrate
 </code></pre>
 <p>The migrations are published with the current timestamp: one creates the <code>judgment_assessments</code> table, the other alters it to hold <a href="#recorded-failures">Unassessed attempts</a>. Republishing with <code>--force</code> overwrites the files you already published rather than adding more.</p>
-<p><strong>Upgrading from v0.1.0.</strong> Run the same two commands without <code>--force</code>. Your published create migration is left alone, and only the new one is added, timestamped now. It makes <code>answers</code>, <code>engine</code>, <code>model</code> and <code>provenance_details</code> nullable and adds <code>failure_type</code> and <code>failure_message</code>. Every existing record is kept as it is.</p>
+<p>Upgrading from v0.1.0 adds one migration: see <a href="#upgrading">Upgrading</a>.</p>
 
 <h2 id="declaring-a-judgment">Declaring a Judgment</h2>
 <p>A Judgment is constructed with its Subject, like a Mailable. It declares its Evidence explicitly, the Questions to ask, and optionally a default Decision.</p>
@@ -721,7 +721,7 @@ Judge::dispatch(new RefundAbuse($refund));
   </tbody>
 </table></div>
 <p>Like <code>assessment()</code>, the record’s <code>outcome()</code> and <code>decide()</code> take an optional Judgment to rebuild over.</p>
-<p><strong>Upgrading from v0.1.0.</strong> v0.1.0 only assessed a dispatched Judgment, so applications recorded its Outcome from an <code>AssessmentCompleted</code> listener calling <code>$event-&gt;record?-&gt;outcome()</code>. Remove that listener, or its call, and move the Action to an <code>AssessmentDecided</code> listener. Kept, the Judgment is decided twice: <code>AssessmentDecided</code> fires twice, and the listener’s decision overwrites the recorded Outcome unless the record is in Review. A listener applying another Decision now runs alongside the default one, and whichever runs last is recorded; to keep only it, make it the Judgment’s default Decision.</p>
+<p>v0.1.0 did not decide a dispatched Judgment, so applications upgrading from it must move their Action: see <a href="#upgrade-actions">Upgrading</a>.</p>
 
 <h3 id="acting-on-the-outcome">Acting on the Outcome</h3>
 <p>Every decision that counts fires <code>RobertoGallea\Judgment\Events\AssessmentDecided</code>, so the Action for an Outcome lives in one listener, whether the Judgment was assessed sync or queued. It fires for <code>$assessment-&gt;outcome()</code> / <code>-&gt;decide()</code> on an Assessment a Judge produced, and for <code>$record-&gt;outcome()</code> / <code>-&gt;decide()</code>: the first two rows of the table above. It never fires for a <a href="#replaying-an-assessment">Replay</a>, an <code>Assessment::fake()</code>, or an Outcome refused because it <a href="#when-recording-fails">cannot be recorded</a>.</p>
@@ -1086,7 +1086,54 @@ Judge::assertNotDispatched(ProductReview::class);
 <p>So a feature test that assesses through the fake needs the package’s migration, as the application does. Without it, and with <code>judgment.persistence.required</code> on (the default), assessing throws <a href="#when-recording-fails"><code>AssessmentNotRecorded</code></a>. A test that needs no record can turn persistence off instead; the fake then records nothing, and events carry a null <code>$record</code>:</p>
 <pre><code class="language-php">config(['judgment.persistence.enabled' =&gt; false]);   // in the test, or JUDGMENT_PERSIST=false in phpunit.xml
 </code></pre>
-<p><strong>Upgrading from v0.1.0.</strong> The fake recorded nothing before, so test suites that assessed through it without the migration, or without <code>RefreshDatabase</code>, now get <code>AssessmentNotRecorded</code>. Add the migration and <code>RefreshDatabase</code> to the tests that need records, and turn persistence off for the rest.</p>
+<p>The fake recorded nothing in v0.1.0: see <a href="#upgrade-fake">Upgrading</a> for suites written against it.</p>
+
+<h2 id="upgrading">Upgrading from v0.1.0</h2>
+<p>v0.2.0 records failed attempts, decides queued Judgments itself, records under <code>Judge::fake()</code> and adds a public Calibration API. Five changes can break an application written for v0.1.0; work through them in order.</p>
+
+<h3 id="upgrade-migration" data-nav="The new migration">Publish and run the new migration</h3>
+<p>Run the same commands as on <a href="#installation">installation</a>, without <code>--force</code>:</p>
+<pre><code class="language-bash">php artisan vendor:publish --tag=judgment-migrations
+php artisan migrate
+</code></pre>
+<p>Your published create migration is left alone, and only the new one is added, timestamped now. It makes <code>answers</code>, <code>engine</code>, <code>model</code> and <code>provenance_details</code> nullable and adds <code>failure_type</code> and <code>failure_message</code>, so the table can hold <a href="#recorded-failures">Unassessed attempts</a>. Every existing record is kept as it is.</p>
+
+<h3 id="upgrade-latest-assessment" data-nav="latestAssessment()"><code>latestAssessment()</code> may return an Unassessed attempt</h3>
+<p>Failed attempts are now recorded in the same table, so <code>latestAssessment()</code> returns the latest attempt, which may have no answers. Calling <code>assessment()</code>, <code>decide()</code> or <code>outcome()</code> on it throws <code>UnrebuildableAssessment</code>. Where the code needs answers, ask for the latest answered record, or check <code>isUnassessed()</code> first:</p>
+<pre><code class="language-php">$record = $refund-&gt;assessments()-&gt;answered()-&gt;where('judgment', RefundAbuse::class)-&gt;latest('id')-&gt;first();
+</code></pre>
+<p>Queries of your own over <code>judgment_assessments</code> need the same care: add the <code>answered()</code> scope wherever a null <code>answers</code> would break them.</p>
+
+<h3 id="upgrade-actions" data-nav="Actions on AssessmentDecided">Move Actions to <code>AssessmentDecided</code></h3>
+<p>v0.1.0 only assessed a dispatched Judgment, so applications recorded its Outcome from an <code>AssessmentCompleted</code> listener calling <code>$event-&gt;record?-&gt;outcome()</code>. The package now <a href="#deciding-after-the-queue">decides it in a chained job</a> and announces every real decision with <a href="#acting-on-the-outcome"><code>AssessmentDecided</code></a>, sync or queued. Remove that listener, or its call, and move the Action to an <code>AssessmentDecided</code> listener:</p>
+<pre><code class="language-php">// Before: v0.1.0
+public function handle(AssessmentCompleted $event): void
+{
+    $outcome = $event-&gt;record?-&gt;outcome();
+    // act on $outcome
+}
+
+// After: v0.2.0
+public function handle(AssessmentDecided $event): void
+{
+    // act on $event-&gt;outcome
+}
+</code></pre>
+<p>Kept, the Judgment is decided twice: <code>AssessmentDecided</code> fires twice, and the listener’s decision overwrites the recorded Outcome unless the record is in Review. A listener applying another Decision now runs alongside the default one, and whichever runs last is recorded; to keep only it, make it the Judgment’s default Decision. A failing Decision is retried by <code>DecideAssessment</code> up to <code>judgment.queue.decide_tries</code> times, so keep the Action idempotent.</p>
+
+<h3 id="upgrade-fake" data-nav="Tests with Judge::fake()">Give fake-based tests the migration, or turn persistence off</h3>
+<p><code>Judge::fake()</code> recorded nothing before; it now <a href="#judge-fake-records">records like the Judge</a>. Test suites that assessed through it without the migration, or without <code>RefreshDatabase</code>, now get <code>AssessmentNotRecorded</code>. Add the migration and <code>RefreshDatabase</code> to the tests that need records, and turn persistence off for the rest:</p>
+<pre><code class="language-xml">&lt;env name="JUDGMENT_PERSIST" value="false"/&gt;   &lt;!-- phpunit.xml --&gt;
+</code></pre>
+
+<h3 id="upgrade-calibration" data-nav="Calibration from code">Calibrate from code, not from the command’s output</h3>
+<p>In v0.1.0 the only way to read a Calibration was to parse the tables <code>judgment:eval</code> prints. Their layout is not a contract and may change. Build the report with <a href="#calibration-api"><code>Calibration::for()</code></a> instead, or read <a href="#calibration-json"><code>judgment:eval --json</code></a> from a tool or a CI job:</p>
+<pre><code class="language-php">$report = Calibration::for(RefundAbuse::class)-&gt;run();   // past Resolutions are the labels
+
+foreach ($report-&gt;results as $result) {
+    $result-&gt;accuracy();
+}
+</code></pre>
 
 <h2 id="package-development">Package development</h2>
 <pre><code class="language-bash">composer test      # Pest
