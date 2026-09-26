@@ -208,7 +208,7 @@ $assessment-&gt;outcome();                             // your Decision: Escalat
   <li><strong><a href="#persisted-assessments">Persisted Assessments</a></strong> with their Evidence, answers, Provenance and Outcome, for audit and replay.</li>
   <li><strong><a href="#queued-assessment">Queued assessment</a></strong> off the request cycle.</li>
   <li><strong><a href="#review-and-resolution">Review and Resolution</a></strong> of uncertain Outcomes by a person, recorded next to the automatic Outcome.</li>
-  <li><strong><a href="#calibration">Calibration</a></strong> of a Decision’s thresholds against labelled cases with <code>judgment:eval</code>.</li>
+  <li><strong><a href="#calibration">Calibration</a></strong> of a Decision’s thresholds against labelled cases, with <code>judgment:eval</code> or <a href="#calibration-api">from code</a>.</li>
   <li><strong><a href="#coding-agents-laravel-boost">Coding-agent skills</a></strong> for Laravel Boost that write Judgments and Decisions from a plain-language description.</li>
   <li><strong><a href="#events-and-logging">Events and logging</a></strong> for every assessment and Review.</li>
   <li><strong><a href="#testing">Testing fakes</a></strong> that script answers without an Engine: <code>Assessment::fake()</code> and <code>Judge::fake()</code>.</li>
@@ -838,6 +838,34 @@ php artisan judgment:eval RefundAbuse --engine=jev --engine=jev-next    # compar
 | abusive    | 0.4–0.5 | 6     | approve 2, reject 4  | —        | 100.0%      |
 | abusive    | 0.9–1.0 | 9     | reject 9             | 100.0%   | 0.0%        |
 </code></pre>
+
+<h3 id="calibration-api" data-nav="From code">Calibrating from code</h3>
+<p><code>judgment:eval</code> is built on a public API, so an application can calibrate without parsing the command’s output, for example to chart a Decision’s accuracy on an admin page. <code>Calibration::for()</code> takes a Judgment class and returns a builder. Each method returns a new builder, and <code>run()</code> returns a <code>CalibrationReport</code>:</p>
+<pre><code class="language-php">use RobertoGallea\Judgment\Calibration\Calibration;
+
+$report = Calibration::for(RefundAbuse::class)
+    -&gt;fromDataset(storage_path('refunds.json'))          // or fromResolutions(), the default
+    -&gt;engines('jev', 'jev-next')                         // like --engine; the Judgment’s own when omitted
+    -&gt;decisions(RefundDecision::class, StrictRefundDecision::class) // like --decision; the default when omitted
+    -&gt;run();
+
+foreach ($report-&gt;results as $result) {
+    $result-&gt;identity-&gt;model;      // 'jev-1.13.0'
+    $result-&gt;identity-&gt;decision;   // RefundDecision::class
+    $result-&gt;accuracy();           // 0.94, or null when nothing was decided automatically
+}
+</code></pre>
+<p>The cases, the labels and the rules are those of <a href="#calibration-labels">the command</a>, and it throws <code>InvalidCalibration</code> where the command stops with an error. Every class of the report is read-only:</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Class</th><th>Exposes</th></tr></thead>
+  <tbody>
+    <tr><td><code>CalibrationReport</code></td><td><code>results</code>, one <code>CalibrationResult</code> per Calibration Identity, and <code>skipped</code>, the Resolutions whose Subject no longer exists</td></tr>
+    <tr><td><code>CalibrationIdentity</code></td><td><code>questions</code> (the fingerprint), <code>model</code>, <code>decision</code>, <code>decisionVersion</code> and <code>language</code>; results of different identities are never mixed</td></tr>
+    <tr><td><code>CalibrationResult</code></td><td><code>identity</code>; <code>cases</code> (all asked), <code>unassessed</code>, <code>sentToReview</code>, <code>automatic</code> and <code>correct</code>; <code>reviewRate()</code> over the assessed cases and <code>accuracy()</code> over the automatic ones, each null when there is nothing to measure; and <code>bands</code></td></tr>
+    <tr><td><code>CalibrationBand</code></td><td><code>question</code> (<code>flags.hate</code> for a Likelihood of a Set), <code>from</code> and <code>to</code>, <code>cases</code>, <code>expected</code> (Outcome value =&gt; cases), <code>sentToReview</code>, <code>automatic</code>, <code>correct</code>, <code>reviewRate()</code> and <code>accuracy()</code></td></tr>
+  </tbody>
+</table></div>
+<p>Each case is a paid Engine round, as with the command, so run it on demand or on a schedule, not on every page view. <code>Calibration</code> is not on the <code>Judge</code> contract, so <code>Judge::fake()</code> cannot script it and prevents its Engine calls: in a test, bind your own <code>Engine</code> instead.</p>
 
 <h2 id="coding-agents-laravel-boost" data-nav="Coding agents">Coding agents (Laravel Boost)</h2>
 <p>The package ships <a href="https://github.com/laravel/boost">Laravel Boost</a> resources, so a coding agent can write Judgments and Decisions from a plain-language description:</p>

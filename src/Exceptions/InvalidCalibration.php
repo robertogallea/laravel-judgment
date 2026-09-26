@@ -6,7 +6,7 @@ use InvalidArgumentException;
 use RobertoGallea\Judgment\Contracts\Decision;
 use RobertoGallea\Judgment\Contracts\Outcome;
 
-/** A judgment:eval run that cannot go on: an unknown class, a dataset it cannot read, or an expected Outcome no Decision can settle on. */
+/** A Calibration run that cannot go on: an unknown class, a dataset it cannot read, or an expected Outcome no Decision can settle on. */
 final class InvalidCalibration extends InvalidArgumentException
 {
     public static function notA(string $kind, string $name): self

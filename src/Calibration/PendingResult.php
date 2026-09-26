@@ -11,12 +11,12 @@ use RobertoGallea\Judgment\Questions\LikelihoodSet;
 use RobertoGallea\Judgment\Questions\Rating;
 
 /**
- * The results of the cases sharing one calibration identity: question set, model version,
+ * The results so far of the cases sharing one Calibration Identity: question set, model version,
  * Decision version and Evidence language, which are never mixed (ADR-0008).
  *
  * @internal
  */
-final class Group
+final class PendingResult
 {
     public readonly Tally $tally;
 
@@ -73,5 +73,26 @@ final class Group
     public function unassessed(): void
     {
         $this->tally->unassessed++;
+    }
+
+    /** The results so far, as a value that no later case changes. */
+    public function result(): CalibrationResult
+    {
+        $bands = [];
+        foreach ($this->bands as $question => $tallies) {
+            foreach ($tallies as $band => $tally) {
+                $bands[] = new CalibrationBand((string) $question, $band / 10, ($band + 1) / 10, $tally->cases, $tally->expected, $tally->sentToReview, $tally->automatic, $tally->correct);
+            }
+        }
+
+        return new CalibrationResult(
+            new CalibrationIdentity($this->questions, $this->model, $this->decision, $this->version, $this->language),
+            $this->tally->cases + $this->tally->unassessed,
+            $this->tally->unassessed,
+            $this->tally->sentToReview,
+            $this->tally->automatic,
+            $this->tally->correct,
+            $bands,
+        );
     }
 }
