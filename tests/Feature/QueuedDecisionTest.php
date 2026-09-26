@@ -7,7 +7,9 @@ use RobertoGallea\Judgment\Assessment;
 use RobertoGallea\Judgment\Contracts\Decision;
 use RobertoGallea\Judgment\Contracts\Engine;
 use RobertoGallea\Judgment\Events\AssessmentAwaitingReview;
+use RobertoGallea\Judgment\Events\AssessmentCompleted;
 use RobertoGallea\Judgment\Events\AssessmentDecided;
+use RobertoGallea\Judgment\Exceptions\UnrebuildableAssessment;
 use RobertoGallea\Judgment\Jobs\DecideAssessment;
 use RobertoGallea\Judgment\Models\AssessmentRecord;
 use RobertoGallea\Judgment\Tests\Fixtures\FailingEngine;
@@ -103,8 +105,11 @@ it('fails only the decision when the Decision throws, and retries it without ask
         ->and($engine->requests)->toHaveCount(1);
 });
 
-it('decides on the assessing job\'s connection and queue, tried as configured', function (?string $queue, mixed $tries, int $expected) {
-    config(['judgment.queue.connection' => 'sync', 'judgment.queue.queue' => 'judgments', 'judgment.queue.decide_tries' => $tries]);
+it('decides on the assessing job\'s connection and queue, tried as configured', function (?string $connection, ?string $queue, mixed $tries, array $expected) {
+    config([
+        'queue.connections.judging' => ['driver' => 'sync'],
+        'judgment.queue.connection' => 'sync', 'judgment.queue.queue' => 'judgments', 'judgment.queue.decide_tries' => $tries,
+    ]);
     $processed = [];
     Event::listen(JobProcessing::class, function (JobProcessing $event) use (&$processed) {
         $job = unserialize($event->job->payload()['data']['command']);
@@ -112,15 +117,34 @@ it('decides on the assessing job\'s connection and queue, tried as configured', 
     });
 
     $dispatched = returnAbuse()->dispatch();
+    if ($connection !== null) {
+        $dispatched->onConnection($connection);
+    }
     if ($queue !== null) {
         $dispatched->onQueue($queue);
     }
     unset($dispatched);
 
-    expect($processed[DecideAssessment::class])->toBe(['sync', $queue ?? 'judgments', $expected]);
+    expect($processed[DecideAssessment::class])->toBe($expected);
 })->with([
-    'configured queue, default tries' => [null, null, 3],
-    'queue chosen at dispatch' => ['urgent', null, 3],
-    'configured tries' => [null, 5, 5],
-    'zero tries' => [null, 0, 1],
+    'configured connection and queue, default tries' => [null, null, null, ['sync', 'judgments', 3]],
+    'connection chosen at dispatch' => ['judging', null, null, ['judging', 'judgments', 3]],
+    'queue chosen at dispatch' => [null, 'urgent', null, ['sync', 'urgent', 3]],
+    'configured tries' => [null, null, 5, ['sync', 'judgments', 5]],
+    'zero tries' => [null, null, 0, ['sync', 'judgments', 1]],
 ]);
+
+it('fails the decision without retrying when the record can no longer be rebuilt', function () {
+    Event::listen(AssessmentCompleted::class, fn (AssessmentCompleted $event) => $event->record?->update(['questions_fingerprint' => 'changed']));
+    $failed = [];
+    Event::listen(JobFailed::class, function (JobFailed $event) use (&$failed) {
+        $failed[] = $event;
+    });
+
+    returnAbuse()->dispatch();
+
+    $decide = collect($failed)->sole(fn (JobFailed $event) => $event->job->resolveName() === DecideAssessment::class);
+    expect($decide->exception)->toBeInstanceOf(UnrebuildableAssessment::class)
+        ->and($decide->job->hasFailed())->toBeTrue()
+        ->and(AssessmentRecord::sole()->outcome)->toBeNull();
+});

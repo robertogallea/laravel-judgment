@@ -4,6 +4,7 @@ namespace RobertoGallea\Judgment\Jobs;
 
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use RobertoGallea\Judgment\Exceptions\UnrebuildableAssessment;
 use RobertoGallea\Judgment\Judgment;
 use RobertoGallea\Judgment\Models\AssessmentRecord;
 
@@ -25,6 +26,11 @@ final class DecideAssessment implements ShouldQueue
 
     public function handle(): void
     {
-        $this->record->outcome($this->judgment);
+        try {
+            $this->record->outcome($this->judgment);
+        } catch (UnrebuildableAssessment $e) {
+            // Every try would rebuild the same record the same way, so fail it for good.
+            $this->fail($e);
+        }
     }
 }
